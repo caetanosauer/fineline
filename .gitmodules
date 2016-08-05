@@ -1,0 +1,3 @@
+[submodule "foster-btree"]
+	path = foster-btree
+	url = https://github.com/caetanosauer/foster-btree
