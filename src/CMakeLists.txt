@@ -3,12 +3,12 @@ INCLUDE_DIRECTORIES (
   ${CMAKE_SOURCE_DIR}/foster-btree/src
 )
 
-# set(foster_SRCS
-#     ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
-# )
+set(fineline_SRCS
+    # ${CMAKE_CURRENT_SOURCE_DIR}/logpage.cpp
+)
 
-# add_library(foster STATIC ${foster_SRCS})
-# target_link_libraries(sm
+# add_library(fineline STATIC ${fineline_SRCS})
+# target_link_libraries(fineline
 #     lib1
 #     lib2
 #     )

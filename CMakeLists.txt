@@ -75,7 +75,8 @@ TEST_BIG_ENDIAN(WORDS_BIGENDIAN)
 
 # Subdirectories
 add_subdirectory(src)
-# add_subdirectory(test EXCLUDE_FROM_ALL)
+add_subdirectory(test EXCLUDE_FROM_ALL)
+add_subdirectory(foster-btree/third-party/googletest EXCLUDE_FROM_ALL)
 # add_subdirectory(bench EXCLUDE_FROM_ALL)
 
 # add a target to generate API documentation with Doxygen
