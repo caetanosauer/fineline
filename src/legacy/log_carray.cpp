@@ -1,6 +1,28 @@
 /*
+ * MIT License
+ *
+ * Copyright (c) 2016 Caetano Sauer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/*
  * (c) Copyright 2014, Hewlett-Packard Development Company, LP
  */
+
 /*
      Shore-MT -- Multi-threaded port of the SHORE storage manager
 
@@ -24,10 +46,11 @@
    RESULTING FROM THE USE OF THIS SOFTWARE.
 */
 
-#include "w_defines.h"
-
-#include "sm_base.h"
 #include "log_carray.h"
+
+namespace fineline {
+namespace legacy {
+
 
 void ConsolidationArray::wait_for_leader(CArraySlot* info) {
     long old_count;
@@ -36,8 +59,8 @@ void ConsolidationArray::wait_for_leader(CArraySlot* info) {
 }
 
 bool ConsolidationArray::wait_for_expose(CArraySlot* info) {
-    w_assert1(SLOT_FINISHED == info->vthis()->count);
-    w_assert1(CARRAY_RELEASE_DELEGATION);
+    assert<1>(SLOT_FINISHED == info->vthis()->count);
+    assert<1>(CARRAY_RELEASE_DELEGATION);
     lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
     // If there is a predecessor which is still running,
     // let's try to delegate the work of releasing the buffer
@@ -77,7 +100,7 @@ ConsolidationArray::~ConsolidationArray() {
     delete[] _active_slots;
     // Check all slots are freed
     for (int i = 0; i < ALL_SLOT_COUNT; ++i) {
-        w_assert0(_all_slots[i].count == SLOT_UNUSED
+        assert<0>(_all_slots[i].count == SLOT_UNUSED
             || _all_slots[i].count == SLOT_AVAILABLE);
     }
 }
@@ -85,11 +108,11 @@ ConsolidationArray::~ConsolidationArray() {
 
 CArraySlot* ConsolidationArray::join_slot(int32_t size, carray_status_t &old_count)
 {
-    w_assert1(size > 0);
+    assert<1>(size > 0);
     carray_slotid_t idx =  (carray_slotid_t) ::pthread_self();
     while (true) {
         // probe phase
-        CArraySlot* info = NULL;
+        CArraySlot* info = nullptr;
         while (true) {
             idx = (idx + 1) % _active_slot_count;
             info = _active_slots[idx];
@@ -103,7 +126,7 @@ CArraySlot* ConsolidationArray::join_slot(int32_t size, carray_status_t &old_cou
         // join phase
         while (true) {
             // set to 'available' and add our size to the slot
-            carray_status_t new_count = join_carray_status(old_count, size);
+            carray_status_t new_count = old_count + size;
             carray_status_t old_count_cas_tmp = old_count;
             if(lintel::unsafe::atomic_compare_exchange_strong<carray_status_t>(
                 &info->count, &old_count_cas_tmp, new_count))
@@ -114,12 +137,12 @@ CArraySlot* ConsolidationArray::join_slot(int32_t size, carray_status_t &old_cou
                 // and gone through a whole join-release cycle, so that info is
                 // now on a different array position. In general, this second
                 // while loop must not use idx at all.
-                // w_assert1(old_count != 0 || _active_slots[idx] == info);
+                // assert<1>(old_count != 0 || _active_slots[idx] == info);
                 return info;
             }
             else {
                 // the status has been changed.
-                w_assert1(old_count != old_count_cas_tmp);
+                assert<1>(old_count != old_count_cas_tmp);
                 old_count = old_count_cas_tmp;
                 if (old_count < SLOT_AVAILABLE) {
                     // it's no longer available. retry from probe
@@ -146,7 +169,7 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
     // 2. Delegating
     // 3. Spinning (can't delegate)
     // 4. Busy
-    w_assert1(SLOT_FINISHED == info->vthis()->count);
+    assert<1>(SLOT_FINISHED == info->vthis()->count);
     if (CARRAY_RELEASE_DELEGATION) {
         lintel::atomic_thread_fence(lintel::memory_order_release);
         // did next (predecessor in terms of logging) delegate to us?
@@ -157,10 +180,10 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
             // So, additional atomic CAS to make sure we really don't have next.
             mcs_lock::qnode* me2_cas_tmp = &(info->me2);
             if (!lintel::unsafe::atomic_compare_exchange_strong<mcs_lock::qnode*>(
-                &_expose_lock._tail, &me2_cas_tmp, (mcs_lock::qnode*) NULL)) {
+                &_expose_lock._tail, &me2_cas_tmp, (mcs_lock::qnode*) nullptr)) {
                 // CAS failed, so someone just connected to us.
-                w_assert1(_expose_lock._tail != info->me2.vthis());
-                w_assert1(info->me2.vthis()->_next != NULL);
+                assert<1>(_expose_lock._tail != info->me2.vthis());
+                assert<1>(info->me2.vthis()->_next != nullptr);
                 next = _expose_lock.spin_on_next(&info->me2);
             } else {
                 // CAS succeeded, so we removed ourself from _expose_lock!
@@ -170,7 +193,7 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
         if (next) {
             // This is safe because me2 is the first element
             CArraySlot* next_i = reinterpret_cast<CArraySlot*>(next);
-            w_assert1(&next_i->me2 == next);
+            assert<1>(&next_i->me2 == next);
 
             // if the next says it's delegated, we take it over.
             int64_t status_cas_tmp = QNODE_WAITING._combined;
@@ -178,8 +201,8 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
                 &(next_i->me2._status._combined), &status_cas_tmp, QNODE_IDLE._combined);
             if (status_cas_tmp == QNODE_DELEGATED._combined) {
                 // they delegated... up to us to do their dirty work
-                w_assert1(SLOT_FINISHED == next_i->vthis()->count);
-                w_assert1(next_i->pred2 == &info->me2);
+                assert<1>(SLOT_FINISHED == next_i->vthis()->count);
+                assert<1>(next_i->pred2 == &info->me2);
                 lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
                 info->vthis()->count = SLOT_UNUSED;
                 info = next_i;
@@ -188,15 +211,15 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
         }
     }
 
-    // if I get here I hit NULL or non-delegate[ed|able] node, so we are done.
+    // if I get here I hit nullptr or non-delegate[ed|able] node, so we are done.
     lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
     info->vthis()->count = SLOT_UNUSED;
-    return NULL;
+    return nullptr;
 }
 
 void ConsolidationArray::replace_active_slot(CArraySlot* info)
 {
-    w_assert1(info->count > SLOT_AVAILABLE);
+    assert<1>(info->count > SLOT_AVAILABLE);
     while (SLOT_UNUSED != _all_slots[_slot_mark].count) {
         if(++_slot_mark == ALL_SLOT_COUNT) {
             _slot_mark = 0;
@@ -211,3 +234,6 @@ void ConsolidationArray::replace_active_slot(CArraySlot* info)
         }
     }
 }
+
+} // namespace legacy
+} // namespace fineline

@@ -1,6 +1,28 @@
 /*
+ * MIT License
+ *
+ * Copyright (c) 2016 Caetano Sauer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/*
  * (c) Copyright 2014, Hewlett-Packard Development Company, LP
  */
+
 /*
      Shore-MT -- Multi-threaded port of the SHORE storage manager
 
@@ -23,8 +45,6 @@
    DISCLAIM ANY LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER
    RESULTING FROM THE USE OF THIS SOFTWARE.
 */
-#ifndef LOG_CARRAY_H
-#define LOG_CARRAY_H
 
 /**
  * \defgroup CARRAY Consolidation Array
@@ -82,12 +102,17 @@
  * The VLDB Journal 21, no. 2 (2012): 239-263.
  */
 
-#include <stdint.h>
-#include <boost/static_assert.hpp>
-#include "w_base.h"
-#include "w_error.h"
+#ifndef FINELINE_LEGACY_LOG_CARRAY_H
+#define FINELINE_LEGACY_LOG_CARRAY_H
+
 #include "mcs_lock.h"
 #include "lsn.h"
+#include "assertions.h"
+
+namespace fineline {
+namespace legacy {
+
+using foster::assert;
 
 /**
  * Whether to enable \e Delegated-Buffer-Release.
@@ -99,17 +124,18 @@
  * important in individual log record size (and not the sum of all log
  * records of a transaction) varies too much.
  */
-#ifdef USE_ATOMIC_COMMIT
+// #ifdef USE_ATOMIC_COMMIT
 const bool CARRAY_RELEASE_DELEGATION = true;
-#else
-const bool CARRAY_RELEASE_DELEGATION = false;
-#endif
+// #else
+// const bool CARRAY_RELEASE_DELEGATION = false;
+// #endif
 
 /**
  * \brief An integer to represents the status of one C-Array slot.
  * \ingroup CARRAY
  * \details
  * The high 32 bits represent the number of threads joining the group.
+ *      CS TODO: why to we need the number of threads???
  * The low 32 bits represent the total number of bytes of the logs in the group.
  * We combine the two information to one 64bit integer for efficient atomic operations.
  * A C-Array slot is available for new use only when this status value is
@@ -125,6 +151,10 @@ typedef int64_t carray_status_t;
  */
 typedef uint32_t carray_slotid_t;
 
+// CS: workaround for legacy error codes
+using w_error_codes = uint16_t;
+static constexpr w_error_codes w_error_ok = 0;
+
 /**
  * \brief One slot in ConsolidationArray.
  * \ingroup CARRAY
@@ -132,7 +162,7 @@ typedef uint32_t carray_slotid_t;
  * Each slot belongs to two mcs_lock queues, one for buffer acquisition (me/_insert_lock)
  * and another for buffer release (me2/_expose_lock).
  */
-struct CArraySlot {
+struct CArraySlot alignas (CACHELINE_SIZE) {
     /**
     * \brief The secondary queue lock used to delegate buffer-release.
     * Lock head is ConsolidationArray::_expose_lock.
@@ -178,20 +208,18 @@ struct CArraySlot {
      */
     w_error_codes error;                // +sizeof(w_error_codes)
 
-    /** To make this multiply of cacheline size. */
-    char            padding[32-sizeof(w_error_codes)]; // +32-sizeof(w_error_codes) -> 128
-
     /**
      * volatile accesses to make sure compiler isn't fooling us.
      * Most code anyway relies on atomic operations. These are not heavily used.
+     * CS TODO: volatile has nothing to do with thread safety
      */
     CArraySlot volatile* vthis() { return this; }
     /** const version. */
     const CArraySlot volatile* vthis() const { return this; }
 };
-// Doesn't compile in old Debian.
-//BOOST_STATIC_ASSERT_MSG((sizeof(CArraySlot) % CACHELINE_SIZE) == 0,
-//    "size of CArraySlot must be aligned to CACHELINE_SIZE for better performance");
+
+static_assert(sizeof(CArraySlot) % CACHELINE_SIZE == 0,
+   "size of CArraySlot must be aligned to CACHELINE_SIZE for better performance");
 
 /**
  * \brief The implementation class of \b Consolidation \b Array.
@@ -234,26 +262,6 @@ public:
         */
         SLOT_FINISHED       = -4,
     };
-
-    /**
-     * Calculate a new CArray status after joining the given log size to the existing status.
-     */
-    static carray_status_t join_carray_status (carray_status_t current_status, int32_t size) {
-        w_assert1(size >= 0);
-        w_assert1(current_status >= 0);
-        const carray_status_t THREAD_INCREMENT = 1L << 32;
-        return current_status + size + THREAD_INCREMENT;
-    }
-    /**
-     * Extract the current-total of log size in C-Array status.
-     */
-    static int32_t extract_carray_log_size(carray_status_t current_status) {
-        w_assert1(current_status >= 0);
-        // bug fixed: lower 32-bit is the size
-        //const carray_status_t THREAD_MASK = 0xFFFF;
-        const carray_status_t THREAD_MASK = 0xFFFFFFFF;
-        return current_status & THREAD_MASK;
-    }
 
     /**
      * Grabs some active slot and \b atomically joins the slot.
@@ -328,5 +336,8 @@ private:
 inline int ConsolidationArray::_indexof(const CArraySlot* info) const {
     return info - _all_slots;
 }
+
+} // namespace legacy
+} // namespace fineline
 
 #endif // LOG_CARRAY_H
