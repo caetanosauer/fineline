@@ -1,3 +1,24 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2016 Caetano Sauer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 /* -*- mode:C++; c-basic-offset:4 -*-
      Shore-MT -- Multi-threaded port of the SHORE storage manager
 
@@ -50,18 +71,23 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 
 */
 
-#include "w_defines.h"
-
-/*  -- do not edit anything above this line --   </std-header>*/
-
 #include "lsn.h"
+#include "mcs_lock.h"
+
+#include <sstream>
+
+namespace fineline {
+namespace legacy {
 
 const lsn_t lsn_t::null(0, 0);
 const lsn_t lsn_t::max(lsn_t::file_hwm, lsn_t::mask());
 
 std::string lsn_t::str()
 {
-    stringstream ss;
+    std::stringstream ss;
     ss << *this;
     return ss.str();
+}
+
+}
 }

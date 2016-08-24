@@ -1,21 +1,42 @@
-#ifndef MCS_LOCK_H
-#define MCS_LOCK_H
+/*
+ * MIT License
+ *
+ * Copyright (c) 2016 Caetano Sauer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+#ifndef FINELINE_LEGACY_MCS_LOCK_H
+#define FINELINE_LEGACY_MCS_LOCK_H
 /* -*- mode:C++; c-basic-offset:4 -*-
      Shore-MT -- Multi-threaded port of the SHORE storage manager
-   
+
                        Copyright (c) 2007-2009
       Data Intensive Applications and Systems Labaratory (DIAS)
                Ecole Polytechnique Federale de Lausanne
-   
+
                          All Rights Reserved.
-   
+
    Permission to use, copy, modify and distribute this software and
    its documentation is hereby granted, provided that both the
    copyright notice and this permission notice appear in all copies of
    the software, derivative works or modified versions, and any
    portions thereof, and that both notices appear in supporting
    documentation.
-   
+
    This code is distributed in the hope that it will be useful, but
    WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. THE AUTHORS
@@ -24,8 +45,16 @@
 */
 
 // -*- mode:c++; c-basic-offset:4 -*-
-#include <AtomicCounter.hpp>
-#include "w_defines.h"
+
+#define CACHELINE_SIZE 64
+
+#include <cstdint>
+#include <cstddef>
+
+#include "AtomicCounter.hpp"
+
+namespace fineline {
+namespace legacy {
 
 /**
  * Used to access qnode's _waiting and _delegated together
@@ -44,10 +73,10 @@ const qnode_status QNODE_DELEGATED = {{1, 1}};
 
 /**\brief An MCS queuing spinlock.
  *
- * Useful for short, contended critical sections. 
+ * Useful for short, contended critical sections.
  * If contention is expected to be rare, use a
- * tatas_lock; 
- * if critical sections are long, use pthread_mutex_t so 
+ * tatas_lock;
+ * if critical sections are long, use pthread_mutex_t so
  * the thread can block instead of spinning.
  *
  * Tradeoffs are:
@@ -69,11 +98,11 @@ struct mcs_lock {
         mcs_lock* _held;
         operator qnode*() { return &_node; }
     };
-#define MCS_EXT_QNODE_INITIALIZER {{NULL,false},NULL}
+#define MCS_EXT_QNODE_INITIALIZER {{nullptr,false},nullptr}
 #define MCS_EXT_QNODE_INITIALIZE(x) \
-{ (x)._node._next = NULL; (x)._node._waiting = 0; (x)._node._delegated = 0; (x)._held = NULL; }
+{ (x)._node._next = nullptr; (x)._node._waiting = 0; (x)._node._delegated = 0; (x)._held = nullptr; }
     qnode* _tail;
-    mcs_lock() : _tail(NULL) { }
+    mcs_lock() : _tail(nullptr) { }
 
     /* This spinning occurs whenever there are critical sections ahead
        of us.
@@ -91,10 +120,10 @@ struct mcs_lock {
         return false;
     }
     bool attempt(qnode* me) {
-        me->_next = NULL;
+        me->_next = nullptr;
         me->_status.individual._waiting = 1;
         // lock held?
-        qnode* null_cas_tmp = NULL;
+        qnode* null_cas_tmp = nullptr;
         if(!lintel::unsafe::atomic_compare_exchange_strong<qnode*>(
             &_tail, &null_cas_tmp, (qnode*) me))
             return false;
@@ -111,7 +140,7 @@ struct mcs_lock {
     }
 
     qnode* __unsafe_begin_acquire(qnode* me) {
-        me->_next = NULL;
+        me->_next = nullptr;
         me->_status.individual._waiting = 1;
         qnode* pred = lintel::unsafe::atomic_exchange<qnode*>(&_tail, me);
         if(pred) {
@@ -137,11 +166,14 @@ struct mcs_lock {
         while(!(next=me->vthis()->_next));
         return next;
     }
-    void release(ext_qnode *me) { 
-        w_assert1(is_mine(me));
-        me->_held = 0; release((qnode*) me); 
+    void release(ext_qnode *me) {
+        // w_assert1(is_mine(me));
+        me->_held = 0; release((qnode*) me);
     }
-    void release(ext_qnode &me) { w_assert1(is_mine(&me)); release(&me); }
+    void release(ext_qnode &me) {
+        // w_assert1(is_mine(&me));
+        release(&me);
+    }
     void release(qnode &me) { release(&me); }
     void release(qnode* me) {
         lintel::atomic_thread_fence(lintel::memory_order_release);
@@ -150,7 +182,7 @@ struct mcs_lock {
         if(!(next=me->_next)) {
             qnode* me_cas_tmp = me;
             if(me == _tail &&
-                lintel::unsafe::atomic_compare_exchange_strong<qnode*>(&_tail, &me_cas_tmp, (qnode*) NULL)) {
+                lintel::unsafe::atomic_compare_exchange_strong<qnode*>(&_tail, &me_cas_tmp, (qnode*) nullptr)) {
                 return;
             }
             next = spin_on_next(me);
@@ -163,5 +195,8 @@ struct mcs_lock {
 
 /** Used to keep mcs_lock in its own cacheline. */
 const size_t CACHELINE_MCS_PADDING = CACHELINE_SIZE - sizeof(mcs_lock);
-#endif
 
+} // namespace legacy
+} // namespace fineline
+
+#endif

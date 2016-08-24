@@ -1,3 +1,24 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2016 Caetano Sauer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
 /* -*- mode:C++; c-basic-offset:4 -*-
      Shore-MT -- Multi-threaded port of the SHORE storage manager
 
@@ -50,14 +71,15 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 
 */
 
-#ifndef LSN_H
-#define LSN_H
+#ifndef FINELINE_LEGACY_LSN_H
+#define FINELINE_LEGACY_LSN_H
 
-#include "w_defines.h"
+#include <cstdint>
+#include <string>
+#include <iostream>
 
-/*  -- do not edit anything above this line --   </std-header>*/
-
-#include "w_base.h"
+namespace fineline {
+namespace legacy {
 
 /* FRJ: Major changes to lsn_t
  * Once the database runs long enough we will run out of
@@ -105,7 +127,7 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
    For now, though, we'll just assume overflow doesn't happen ;)
 */
 
-typedef int64_t sm_diskaddr_t;
+typedef int64_t diskaddr_t;
 
 /**
  * \defgroup LSNS Log Sequence Numbers (LSN)
@@ -253,7 +275,7 @@ public:
     lsn_t() : _data(0) { }
     lsn_t(lsndata_t data) : _data(data) { }
 
-    lsn_t(uint32_t f, sm_diskaddr_t r) :
+    lsn_t(uint32_t f, diskaddr_t r) :
                 _data(from_file(f) | from_rba(r)) { }
 
     // copy operator
@@ -279,13 +301,13 @@ public:
     uint32_t hi()   const  { return file(); }
     uint32_t file() const { return to_file(_data); }
 
-    sm_diskaddr_t     lo()   const  { return rba(); }
-    sm_diskaddr_t     rba()  const { return to_rba(_data); }
+    diskaddr_t     lo()   const  { return rba(); }
+    diskaddr_t     rba()  const { return to_rba(_data); }
 
     // WARNING: non-atomic read-modify-write operations!
     void copy_rba(const lsn_t &other) {
                 _data = get_file(_data) | get_rba(other._data); }
-    void set_rba(sm_diskaddr_t &other) {
+    void set_rba(diskaddr_t &other) {
                 _data = get_file(_data) | get_rba(other); }
 
     // WARNING: non-atomic read-modify-write operations!
@@ -331,28 +353,32 @@ private:
     static uint64_t from_file(uint32_t data) {
                 return ((uint64_t) data) << PARTITION_SHIFT; }
 
-    static sm_diskaddr_t to_rba(uint64_t r) {
-                return (sm_diskaddr_t) (r & mask()); }
+    static diskaddr_t to_rba(uint64_t r) {
+                return (diskaddr_t) (r & mask()); }
 
     static uint64_t get_rba(uint64_t data) {
                 return to_rba(data); }
 
-    static uint64_t from_rba(sm_diskaddr_t data) {
+    static uint64_t from_rba(diskaddr_t data) {
                 return to_rba(data); }
 };
 
-inline ostream& operator<<(ostream& o, const lsn_t& l)
+inline std::ostream& operator<<(std::ostream& o, const lsn_t& l)
 {
     return o << l.file() << '.' << l.rba();
 }
 
-inline istream& operator>>(istream& i, lsn_t& l)
+inline std::istream& operator>>(std::istream& i, lsn_t& l)
 {
-    sm_diskaddr_t d;
+    diskaddr_t d;
     char c;
     uint64_t f;
     i >> f >> c >> d;
     l = lsn_t(f, d);
     return i;
 }
+
+} // namespace legacy
+} // namespace fineline
+
 #endif
