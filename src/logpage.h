@@ -34,6 +34,8 @@
 #include "lrtype.h"
 #include "slot_array.h"
 
+#include <memory>
+
 namespace fineline {
 
 using foster::LRType;
@@ -42,51 +44,97 @@ using foster::assert;
 template <typename... T>
 using LogEncoder = typename foster::VariadicEncoder<foster::InlineEncoder, T...>;
 
-constexpr size_t LogPageSize = 1048576;
-constexpr size_t LogrecAlignment = 8;
+// Default alignment = 1/4 of typical cache line (128b)
+constexpr size_t LogrecAlignment = 32;
 
-// TODO we prob dont want htese to be templated like this -- because
-// we have to deserialize them at runtime
-template <class NodeId = uint32_t, unsigned SeqNumBits = 24>
+template <
+    class NodeId = uint32_t,
+    class SeqNum = uint32_t,
+    class LogrecLength = uint16_t
+>
 struct alignas(LogrecAlignment) LogrecHeader
 {
+    using IdType = NodeId;
+    using SeqNumType = SeqNum;
+
     LogrecHeader() {}
 
-    LogrecHeader(NodeId id, uint32_t seq, LRType type)
+    LogrecHeader(NodeId id, SeqNum seq, LRType type)
         : node_id(id), seq_num(seq), type(type)
+        // length is set by LogPage
     {}
 
     NodeId node_id;
-    struct {
-        uint32_t seq_num : SeqNumBits;
-        LRType type;
-    };
+    SeqNum seq_num;
+    LogrecLength length;
+    LRType type;
 };
 
-template <size_t PageSize, class IdType = uint32_t>
-class LogPage : protected foster::SlotArray<LogrecHeader<IdType>, PageSize>
+template <class Key>
+class AbstractLogIterator
 {
 public:
-    using Key = LogrecHeader<IdType>;
+    virtual bool next(Key&, char*&) { return false; }
+};
+
+template <size_t PageSize, class LogrecHeader>
+class LogPage : protected foster::SlotArray<LogrecHeader, PageSize>
+{
+public:
+    using Key = LogrecHeader;
     using PayloadPtr = typename foster::SlotArray<Key, PageSize>::PayloadPtr;
     using SlotNumber = typename foster::SlotArray<Key, PageSize>::SlotNumber;
-    using ThisType = LogPage<PageSize, IdType>;
+    using ThisType = LogPage<PageSize, LogrecHeader>;
 
     template <typename... T>
-    ThisType* log(const Key& hdr, T... args)
+    bool try_insert(const LogrecHeader& hdr, T... args)
     {
-        bool success = try_insert(hdr, args...);
-        if (!success) {
-            next_page_ = new ThisType;
-            success = next_page_->try_insert(hdr, args...);
-            assert<0>(success, "Record does not fit in log page");
-            return next_page_;
+        size_t length = LogEncoder<T...>::get_payload_length(args...);
+
+        typename LogPage::PayloadPtr ptr;
+        if (!this->allocate_payload(ptr, length)) {
+            return false;
         }
 
-        return this;
+        auto slot = this->slot_count();
+        if (!this->insert_slot(slot)) {
+            this->free_payload(ptr, length);
+            return false;
+        }
+
+        char* addr = static_cast<char*>(this->get_payload(ptr));
+        LogEncoder<T...>::encode(addr, args...);
+        this->get_slot(slot).key = hdr;
+        this->get_slot(slot).key.length = length;
+        this->get_slot(slot).ptr = ptr;
+        this->get_slot(slot).ghost = false;
+
+        return true;
     }
 
-    class Iterator
+    bool try_insert_raw(const LogrecHeader& hdr, const char* payload)
+    {
+        typename LogPage::PayloadPtr ptr;
+        if (!this->allocate_payload(ptr, hdr.length)) {
+            return false;
+        }
+
+        auto slot = this->slot_count();
+        if (!this->insert_slot(slot)) {
+            this->free_payload(ptr, hdr.length);
+            return false;
+        }
+
+        char* addr = static_cast<char*>(this->get_payload(ptr));
+        ::memcpy(addr, payload, hdr.length);
+        this->get_slot(slot).key = hdr;
+        this->get_slot(slot).ptr = ptr;
+        this->get_slot(slot).ghost = false;
+
+        return true;
+    }
+
+    class Iterator : public AbstractLogIterator<Key>
     {
     public:
         Iterator(ThisType* lp) :
@@ -95,7 +143,7 @@ public:
 
         bool next(Key& key, char*& payload)
         {
-            if (current_slot_ >= lp_->slot_count()) { return false; }
+            if (!lp_ || current_slot_ >= lp_->slot_count()) { return false; }
 
             auto& slot = lp_->get_slot(current_slot_);
             payload = reinterpret_cast<char*>(lp_->get_payload(slot.ptr));
@@ -107,56 +155,15 @@ public:
 
     private:
         SlotNumber current_slot_;
-        LogPage<PageSize>* lp_;
+        ThisType* lp_;
     };
 
-    Iterator iterate()
+    std::unique_ptr<Iterator> iterate()
     {
-        return Iterator{this};
+        return std::unique_ptr<Iterator>{new Iterator{this}};
     }
 
-protected:
-
-    template <typename... T>
-    bool try_insert(const LogrecHeader<uint32_t>& hdr, T... args)
-    {
-        size_t length = LogEncoder<T...>::get_payload_length(args...);
-
-        typename LogPage::PayloadPtr ptr;
-        if (!this->allocate_payload(ptr, length)) {
-            return false;
-        }
-
-        auto slot = this->slot_count();
-        if (!this->insert_slot(slot)) {
-            // No space left -- free previously allocated payload.
-            this->free_payload(ptr, length);
-            return false;
-        }
-
-        char* addr = static_cast<char*>(this->get_payload(ptr));
-        LogEncoder<T...>::encode(addr, args...);
-        this->get_slot(slot).key = hdr;
-        this->get_slot(slot).ptr = ptr;
-        this->get_slot(slot).ghost = false;
-
-        return true;
-    }
-
-private:
-    LogPage<PageSize>* next_page_;
 };
-
-namespace tls {
-
-thread_local LogPage<LogPageSize>* plog = new LogPage<LogPageSize>;
-
-void reset_plog()
-{
-    plog = new LogPage<LogPageSize>;
-}
-
-}
 
 } // namespace fineline
 

@@ -25,6 +25,7 @@
 #include <memory>
 
 #include "lrtype.h"
+#include "logpage.h"
 
 namespace fineline {
 

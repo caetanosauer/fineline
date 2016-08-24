@@ -24,4 +24,4 @@ FUNCTION (X_ADD_TESTCASE targetname the_libraries)
     add_dependencies(check ${targetname})
 ENDFUNCTION()
 
-X_ADD_TESTCASE(test_node_logging gtest)
+X_ADD_TESTCASE(test_node_logging fineline)

@@ -4,10 +4,10 @@ INCLUDE_DIRECTORIES (
 )
 
 set(fineline_SRCS
-    # ${CMAKE_CURRENT_SOURCE_DIR}/logpage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/txncontext.cpp
 )
 
-# add_library(fineline STATIC ${fineline_SRCS})
+add_library(fineline STATIC ${fineline_SRCS})
 # target_link_libraries(fineline
 #     lib1
 #     lib2

@@ -19,53 +19,37 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef FINELINE_LOGGER_H
-#define FINELINE_LOGGER_H
+#ifndef FINELINE_FINELINE_H
+#define FINELINE_FINELINE_H
 
-/**
- * \file kv_array.h
- *
- * A fixed-length array that encodes arbitrary key-value pairs and stores them in a slot array in
- * the appropriate position.
- */
-
-#include "lrtype.h"
+#include "logpage.h"
+#include "plog.h"
+#include "txncontext.h"
+#include "logger.h"
+#include "logrec.h"
 
 namespace fineline {
 
-using foster::LRType;
+/*
+ * COMPILE-TIME CONSTANTS
+ */
+constexpr size_t LogPageSize = 8192;
+constexpr size_t ExtLogPageSize = 1048576; // 1MB
 
-template <class TxnContext, class LogrecHeader>
-class TxnLogger
-{
-public:
-    using IdType = typename LogrecHeader::IdType;
-    using SeqNumType = typename LogrecHeader::SeqNumType;
+using NodeIdType = uint32_t;
+using SeqNumType = uint32_t;
+using LogrecLengthType = uint16_t;
 
-    TxnLogger() : id_(0), seq_(0) { }
+using DftLogrecHeader = LogrecHeader<NodeIdType, SeqNumType, LogrecLengthType>;
+using DftLogPage = LogPage<LogPageSize, DftLogrecHeader>;
+using ExtLogPage = LogPage<ExtLogPageSize, DftLogrecHeader>;
+using OverflowPlog = ChainedPagesPrivateLog<ExtLogPage>;
+using DftPlog = TxnPrivateLog<DftLogPage, OverflowPlog>;
+using DftTxnContext = ThreadLocalTxnContext<BaseTxnContext<DftPlog>>;
+using DftLogger = TxnLogger<DftTxnContext, DftLogrecHeader>;
 
-    template <typename... T>
-    void log(LRType type, T... args)
-    {
-        TxnContext::get()->
-            log(LogrecHeader{id_, ++seq_, type}, args...);
-    }
-
-    void initialize(IdType id, bool logit = true)
-    {
-        id_ = id;
-        if (logit) { log(LRType::Construct, id); }
-    }
-
-    IdType id() { return id_; }
-    SeqNumType seq_num() { return seq_; }
-
-private:
-
-    IdType id_;
-    SeqNumType seq_;
-};
 
 } // namespace fineline
 
 #endif
+

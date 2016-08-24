@@ -30,8 +30,7 @@
 #include "kv_array.h"
 #include "node.h"
 #include "pointers.h"
-#include "logger.h"
-#include "logrec.h"
+#include "fineline.h"
 
 constexpr size_t DftArrayBytes = 8192;
 constexpr size_t DftAlignment = 8;
@@ -44,15 +43,7 @@ using KVArray = foster::KeyValueArray<K, V,
       SArray<uint16_t>,
       foster::BinarySearch<SArray<uint16_t>>,
       foster::DefaultEncoder<K, V, uint16_t>,
-      fineline::DefaultLogger<uint32_t, uint32_t>
->;
-
-template<class K, class V>
-using KVArrayNoPMNK = foster::KeyValueArray<K, V,
-      SArray<K>,
-      foster::BinarySearch<SArray<K>>,
-      foster::DefaultEncoder<K, V, K>,
-      fineline::DefaultLogger<uint32_t, uint32_t>
+      fineline::DftLogger
 >;
 
 template<class K, class V>
@@ -61,14 +52,10 @@ using BTNode = foster::BtreeNode<K, V,
     foster::PlainPtr
 >;
 
-template<class K, class V>
-using BTNodeNoPMNK = foster::BtreeNode<K, V,
-    KVArrayNoPMNK,
-    foster::PlainPtr
->;
-
 TEST(TestInsertions, SimpleInsertions)
 {
+    fineline::DftTxnContext ctx;
+
     BTNode<string, string> node;
     ASSERT_TRUE(node.is_low_key_infinity());
     ASSERT_TRUE(node.is_high_key_infinity());
@@ -89,6 +76,8 @@ TEST(TestInsertions, SimpleInsertions)
 
 TEST(TestSplit, SimpleSplit)
 {
+    fineline::DftTxnContext ctx;
+
     using NodePointer = BTNode<string, string>::NodePointer;
 
     BTNode<string, string> node;
@@ -132,7 +121,7 @@ TEST(TestSplit, SimpleSplit)
 
 TEST(TestRedo, SimpleInsertionRedo)
 {
-    fineline::tls::reset_plog();
+    fineline::DftTxnContext ctx;
 
     BTNode<string, string> node;
     node.insert("key2", "value2");
@@ -144,11 +133,11 @@ TEST(TestRedo, SimpleInsertionRedo)
 
     string v;
     bool found;
-    fineline::LogrecHeader<> hdr;
+    fineline::DftLogrecHeader hdr;
     char* payload;
 
-    auto iter = fineline::tls::plog->iterate();
-    while (iter.next(hdr, payload)) {
+    auto iter = ctx.get_plog()->iterate();
+    while (iter->next(hdr, payload)) {
         auto lr = fineline::ConstructLogRec(hdr.type, node_r, payload);
         std::cout << "REDOING " << *lr << std::endl;
         lr->redo();
