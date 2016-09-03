@@ -5,7 +5,8 @@ INCLUDE_DIRECTORIES (
 
 set(legacy_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/lsn.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/log_carray.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/carray.cpp
+    # ${CMAKE_CURRENT_SOURCE_DIR}/partition.cpp
 )
 
 add_library(legacy STATIC ${legacy_SRCS})
