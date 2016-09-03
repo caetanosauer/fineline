@@ -51,15 +51,16 @@
 namespace fineline {
 namespace legacy {
 
-
-void ConsolidationArray::wait_for_leader(CArraySlot* info) {
+template <class CArraySlot>
+void ConsolidationArray<CArraySlot>::wait_for_leader(CArraySlot* info) {
     long old_count;
-    while( (old_count=info->vthis()->count) >= SLOT_FINISHED);
+    while( (old_count=info->status) >= SLOT_FINISHED);
     lintel::atomic_thread_fence(lintel::memory_order_acquire);
 }
 
-bool ConsolidationArray::wait_for_expose(CArraySlot* info) {
-    assert<1>(SLOT_FINISHED == info->vthis()->count);
+template <class CArraySlot>
+bool ConsolidationArray<CArraySlot>::wait_for_expose(CArraySlot* info) {
+    assert<1>(SLOT_FINISHED == info->status);
     assert<1>(CARRAY_RELEASE_DELEGATION);
     lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
     // If there is a predecessor which is still running,
@@ -80,43 +81,46 @@ bool ConsolidationArray::wait_for_expose(CArraySlot* info) {
     return false;
 }
 
-ConsolidationArray::ConsolidationArray(int active_slot_count)
+template <class CArraySlot>
+ConsolidationArray<CArraySlot>::ConsolidationArray(int active_slot_count)
     : _slot_mark(0), _active_slot_count(active_slot_count) {
     // Zero-out all slots
     ::memset(_all_slots, 0, sizeof(CArraySlot) * ALL_SLOT_COUNT);
     typedef CArraySlot* CArraySlotPtr;
     _active_slots = new CArraySlotPtr[_active_slot_count];
     for (int i = 0; i < ALL_SLOT_COUNT; ++i) {
-        _all_slots[i].count = SLOT_UNUSED;
-        _all_slots[i].error = w_error_ok;
+        _all_slots[i].status = SLOT_UNUSED;
     }
     // Mark initially active slots
     for (int i = 0; i < _active_slot_count; ++i) {
         _active_slots[i] = _all_slots + i;
-        _active_slots[i]->count = SLOT_AVAILABLE;
+        _active_slots[i]->status = SLOT_AVAILABLE;
     }
 }
-ConsolidationArray::~ConsolidationArray() {
+template <class CArraySlot>
+ConsolidationArray<CArraySlot>::~ConsolidationArray() {
     delete[] _active_slots;
     // Check all slots are freed
     for (int i = 0; i < ALL_SLOT_COUNT; ++i) {
-        assert<0>(_all_slots[i].count == SLOT_UNUSED
-            || _all_slots[i].count == SLOT_AVAILABLE);
+        assert<0>(_all_slots[i].status == SLOT_UNUSED
+            || _all_slots[i].status == SLOT_AVAILABLE);
     }
 }
 
 
-CArraySlot* ConsolidationArray::join_slot(int32_t size, carray_status_t &old_count)
+template <class CArraySlot>
+CArraySlot* ConsolidationArray<CArraySlot>::join_slot(int32_t size, StatusType &old_count)
 {
     assert<1>(size > 0);
-    carray_slotid_t idx =  (carray_slotid_t) ::pthread_self();
+    auto idx = std::hash<std::thread::id>{}(std::this_thread::get_id());
+
     while (true) {
         // probe phase
         CArraySlot* info = nullptr;
         while (true) {
             idx = (idx + 1) % _active_slot_count;
             info = _active_slots[idx];
-            old_count = info->vthis()->count;
+            old_count = info->status;
             if (old_count >= SLOT_AVAILABLE) {
                 // this slot is available for join!
                 break;
@@ -126,10 +130,10 @@ CArraySlot* ConsolidationArray::join_slot(int32_t size, carray_status_t &old_cou
         // join phase
         while (true) {
             // set to 'available' and add our size to the slot
-            carray_status_t new_count = old_count + size;
-            carray_status_t old_count_cas_tmp = old_count;
-            if(lintel::unsafe::atomic_compare_exchange_strong<carray_status_t>(
-                &info->count, &old_count_cas_tmp, new_count))
+            StatusType new_count = old_count + size;
+            StatusType old_count_cas_tmp = old_count;
+            if(lintel::unsafe::atomic_compare_exchange_strong(
+                &info->status, &old_count_cas_tmp, new_count))
             {
                 // CAS succeeded. All done.
                 // The assertion below doesn't necessarily hold because of the
@@ -156,24 +160,26 @@ CArraySlot* ConsolidationArray::join_slot(int32_t size, carray_status_t &old_cou
     }
 }
 
-void ConsolidationArray::join_expose(CArraySlot* info) {
+template <class CArraySlot>
+void ConsolidationArray<CArraySlot>::join_expose(CArraySlot* info) {
     if (CARRAY_RELEASE_DELEGATION) {
         info->me2._status.individual._delegated = 0;
         info->pred2 = _expose_lock.__unsafe_begin_acquire(&info->me2);
     }
 }
 
-CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
+template <class CArraySlot>
+CArraySlot* ConsolidationArray<CArraySlot>::grab_delegated_expose(CArraySlot* info) {
     // Four cases to consider
     // 1. Delegated
     // 2. Delegating
     // 3. Spinning (can't delegate)
     // 4. Busy
-    assert<1>(SLOT_FINISHED == info->vthis()->count);
+    assert<1>(SLOT_FINISHED == info->status);
     if (CARRAY_RELEASE_DELEGATION) {
         lintel::atomic_thread_fence(lintel::memory_order_release);
         // did next (predecessor in terms of logging) delegate to us?
-        mcs_lock::qnode *next = info->me2.vthis()->_next;
+        mcs_lock::qnode *next = info->me2._next;
         if (!next) {
             // the above fast check is not atomic if someone else is now connecting.
             // (if it's already connected, as 8-byte read is at least regular, safe)
@@ -182,8 +188,8 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
             if (!lintel::unsafe::atomic_compare_exchange_strong<mcs_lock::qnode*>(
                 &_expose_lock._tail, &me2_cas_tmp, (mcs_lock::qnode*) nullptr)) {
                 // CAS failed, so someone just connected to us.
-                assert<1>(_expose_lock._tail != info->me2.vthis());
-                assert<1>(info->me2.vthis()->_next != nullptr);
+                assert<1>(_expose_lock._tail != info->me2);
+                assert<1>(info->me2._next != nullptr);
                 next = _expose_lock.spin_on_next(&info->me2);
             } else {
                 // CAS succeeded, so we removed ourself from _expose_lock!
@@ -201,10 +207,10 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
                 &(next_i->me2._status._combined), &status_cas_tmp, QNODE_IDLE._combined);
             if (status_cas_tmp == QNODE_DELEGATED._combined) {
                 // they delegated... up to us to do their dirty work
-                assert<1>(SLOT_FINISHED == next_i->vthis()->count);
+                assert<1>(SLOT_FINISHED == next_i->status);
                 assert<1>(next_i->pred2 == &info->me2);
                 lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
-                info->vthis()->count = SLOT_UNUSED;
+                info->status = SLOT_UNUSED;
                 info = next_i;
                 return info;
             }
@@ -213,19 +219,20 @@ CArraySlot* ConsolidationArray::grab_delegated_expose(CArraySlot* info) {
 
     // if I get here I hit nullptr or non-delegate[ed|able] node, so we are done.
     lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
-    info->vthis()->count = SLOT_UNUSED;
+    info->status = SLOT_UNUSED;
     return nullptr;
 }
 
-void ConsolidationArray::replace_active_slot(CArraySlot* info)
+template <class CArraySlot>
+void ConsolidationArray<CArraySlot>::replace_active_slot(CArraySlot* info)
 {
-    assert<1>(info->count > SLOT_AVAILABLE);
-    while (SLOT_UNUSED != _all_slots[_slot_mark].count) {
+    assert<1>(info->status > SLOT_AVAILABLE);
+    while (SLOT_UNUSED != _all_slots[_slot_mark].status) {
         if(++_slot_mark == ALL_SLOT_COUNT) {
             _slot_mark = 0;
         }
     }
-    _all_slots[_slot_mark].count = SLOT_AVAILABLE;
+    _all_slots[_slot_mark].status = SLOT_AVAILABLE;
 
     // Look for pointer to the slot in the active array
     for (int i = 0; i < _active_slot_count; i++) {

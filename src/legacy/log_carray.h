@@ -102,124 +102,21 @@
  * The VLDB Journal 21, no. 2 (2012): 239-263.
  */
 
-#ifndef FINELINE_LEGACY_LOG_CARRAY_H
-#define FINELINE_LEGACY_LOG_CARRAY_H
+#ifndef FINELINE_LEGACY_CARRAY_H
+#define FINELINE_LEGACY_CARRAY_H
 
-#include "mcs_lock.h"
-#include "lsn.h"
+#include <atomic>
+#include <thread>
+
 #include "assertions.h"
+#include "mcs_lock.h"
 
 namespace fineline {
 namespace legacy {
 
 using foster::assert;
 
-/**
- * Whether to enable \e Delegated-Buffer-Release.
- * \ingroup CARRAY
- *
- * CS: in plog approach (Atomic Commit Protocol), delegated buffer releases
- * become crucial, since the total log volume of each transactions is more
- * likely to vary considerably. In the old approach, the technique is only
- * important in individual log record size (and not the sum of all log
- * records of a transaction) varies too much.
- */
-// #ifdef USE_ATOMIC_COMMIT
 const bool CARRAY_RELEASE_DELEGATION = true;
-// #else
-// const bool CARRAY_RELEASE_DELEGATION = false;
-// #endif
-
-/**
- * \brief An integer to represents the status of one C-Array slot.
- * \ingroup CARRAY
- * \details
- * The high 32 bits represent the number of threads joining the group.
- *      CS TODO: why to we need the number of threads???
- * The low 32 bits represent the total number of bytes of the logs in the group.
- * We combine the two information to one 64bit integer for efficient atomic operations.
- * A C-Array slot is available for new use only when this status value is
- * exactly 0 (SLOT_AVAILABLE). Negative values have special meanings. See the constants below.
- * @see CArraySlot
- * @see ConsolidationArray::Constants
- */
-typedef int64_t carray_status_t;
-
-/**
- * Index in ConsolidationArray's slot.
- * \ingroup CARRAY
- */
-typedef uint32_t carray_slotid_t;
-
-// CS: workaround for legacy error codes
-using w_error_codes = uint16_t;
-static constexpr w_error_codes w_error_ok = 0;
-
-/**
- * \brief One slot in ConsolidationArray.
- * \ingroup CARRAY
- * \details
- * Each slot belongs to two mcs_lock queues, one for buffer acquisition (me/_insert_lock)
- * and another for buffer release (me2/_expose_lock).
- */
-struct CArraySlot alignas (CACHELINE_SIZE) {
-    /**
-    * \brief The secondary queue lock used to delegate buffer-release.
-    * Lock head is ConsolidationArray::_expose_lock.
-    * This must be the first member as we reinterpret qnode as insert_info.
-    * See Section A.3 of Aether paper.
-    */
-    mcs_lock::qnode me2;                // +16 -> 16
-
-// Logging information. Also useful as padding for cacheline (64 byte).
-    /** where will we end up on disk? */
-    lsn_t lsn;                          // +8 -> 24
-    /** end point of our predecessor. */
-    int64_t old_end;                    // +8 -> 32
-    /** start point for thread groups. */
-    int64_t start_pos;                  // +8 -> 40
-    /** how much of the allocation already claimed? */
-    int64_t pos;                        // +8 -> 48
-    /** eventually assigned to _cur_epoch. */
-    int64_t new_end;                    // +8 -> 56
-    /** positive if we started a new partition */
-    int64_t new_base;                   // +8 -> 64
-
-    /**
-     * \brief The current status of this slot.
-     * \details
-     * This is the key variable used for every atomic operation of C-array slot.
-     * @see carray_status_t
-     */
-    carray_status_t count;              // +8 -> 72
-
-    /**
-    * The main queue lock used to acquire log buffers.
-    * Lock head is log_core::_insert_lock.
-    * \NOTE This should not be in the same cache line as me2.
-    */
-    mcs_lock::qnode me;                 // +16 -> 88
-    /**
-    * Predecessor qnode of me2. Used to delegate buffer release.
-    */
-    mcs_lock::qnode* pred2;             // +8 -> 96
-    /**
-     * Set when inserting the log of this slot failed, so far only eOUTOFLOGSPACE possible.
-     */
-    w_error_codes error;                // +sizeof(w_error_codes)
-
-    /**
-     * volatile accesses to make sure compiler isn't fooling us.
-     * Most code anyway relies on atomic operations. These are not heavily used.
-     * CS TODO: volatile has nothing to do with thread safety
-     */
-    CArraySlot volatile* vthis() { return this; }
-    /** const version. */
-    const CArraySlot volatile* vthis() const { return this; }
-};
-
-static_assert(sizeof(CArraySlot) % CACHELINE_SIZE == 0,
-   "size of CArraySlot must be aligned to CACHELINE_SIZE for better performance");
 
 /**
  * \brief The implementation class of \b Consolidation \b Array.
@@ -227,8 +124,12 @@ static_assert(sizeof(CArraySlot) % CACHELINE_SIZE == 0,
  * \details
  * See Section A.2 and A.3 of Aether paper.
  */
-class ConsolidationArray {
+template <class CArraySlot>
+class ConsolidationArray
+{
 public:
+    using StatusType = typename CArraySlot::StatusType;
+
     /** @param[in] active_slot_count Max number of slots that can be active at the same time */
     ConsolidationArray(int active_slot_count);
     ~ConsolidationArray();
@@ -242,26 +143,29 @@ public:
         DEFAULT_ACTIVE_SLOT_COUNT   = 3,
 
         /**
-        * slots that are in active slots and up for grab have this carray_status_t.
+        * slots that are in active slots and up for grab have this StatusType.
         */
         SLOT_AVAILABLE      = 0,
         /**
         * slots that are in the pool but not in active slots
-        * have this carray_status_t.
+        * have this StatusType.
         */
         SLOT_UNUSED         = -1,
         /**
-        * Once the first thread in the slot puts this as carray_status_t, other threads can no
+        * Once the first thread in the slot puts this as StatusType, other threads can no
         * longer join the slot.
         */
         SLOT_PENDING        = -2,
         /**
         * Once the first thread acquires a buffer space and LSN, it puts this \b MINUS
-        * the combined log size as the carray_status_t. All threads in the slot atomically add
+        * the combined log size as the StatusType. All threads in the slot atomically add
         * its log size to this, making the last one notice that it is exactly SLOT_FINISHED.
         */
         SLOT_FINISHED       = -4,
     };
+
+    static_assert(sizeof(CArraySlot) % CACHELINE_SIZE == 0,
+       "size of CArraySlot must be aligned to CACHELINE_SIZE for better performance");
 
     /**
      * Grabs some active slot and \b atomically joins the slot.
@@ -269,7 +173,7 @@ public:
      * @param[out] status \b atomically obtained status of the joined slot
      * @return the slot we have just joined
      */
-    CArraySlot*         join_slot(int32_t size, carray_status_t &status);
+    CArraySlot*         join_slot(int32_t size, StatusType &status);
 
     /**
      * join the memcpy-complete queue but don't spin yet.
@@ -309,33 +213,48 @@ public:
      */
     void                replace_active_slot(CArraySlot* slot);
 
+    StatusType get_and_disable(CArraySlot* cslot)
+    {
+        return std::atomic_exchange_explicit(&cslot->status, SLOT_PENDING);
+    }
+
+    void set_finished(CArraySlot* cslot, StatusType reserved)
+    {
+        std::atomic_thread_fence(std::memory_order_seq_cst);
+        cslot->status = SLOT_FINISHED - reserved;
+    }
+
+    StatusType release(CArraySlot* cslot, StatusType reserved)
+    {
+        return std::atomic_fetch_add(&cslot->status, reserved);
+    }
+
 private:
-    int                 _indexof(const CArraySlot* slot) const;
+    int _indexof(const CArraySlot* slot) const
+    {
+        return slot - _all_slots;
+    }
 
-    /**
-     * Clockhand of active slots. We use this to evenly distribute accesses to slots.
-     * This value is not protected at all because we don't care even if it's not
-     * perfectly even. We anyway atomically obtain the slot.
-     */
-    int32_t             _slot_mark;
-    /** Max number of slots that can be active at the same time. */
-    const int32_t       _active_slot_count;
-    /** All slots, including available, currently used, or retired slots. */
-    CArraySlot          _all_slots[ALL_SLOT_COUNT];
-    /** Active slots that are (probably) up for grab or join. */
-    CArraySlot**        _active_slots;
+    struct alignas(CACHELINE_SIZE) {
+        /**
+         * Clockhand of active slots. We use this to evenly distribute accesses to slots.
+         * This value is not protected at all because we don't care even if it's not
+         * perfectly even. We anyway atomically obtain the slot.
+         */
+        int32_t             _slot_mark;
+        /** Max number of slots that can be active at the same time. */
+        const int32_t       _active_slot_count;
+        /** All slots, including available, currently used, or retired slots. */
+        CArraySlot          _all_slots[ALL_SLOT_COUNT];
+        /** Active slots that are (probably) up for grab or join. */
+        CArraySlot**        _active_slots;
+    };
 
-    // paddings to make sure mcs_lock are in different cacheline
-    /** @cond */ char   _padding[CACHELINE_SIZE]; /** @endcond */
     /**
      * \brief Lock to protect threads releasing their log buffer.
      */
     mcs_lock            _expose_lock;
 };
-
-inline int ConsolidationArray::_indexof(const CArraySlot* info) const {
-    return info - _all_slots;
-}
 
 } // namespace legacy
 } // namespace fineline
