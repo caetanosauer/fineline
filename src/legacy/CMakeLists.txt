@@ -1,6 +1,11 @@
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
+
+find_package(SQLite3 REQUIRED)
+
 INCLUDE_DIRECTORIES (
   ${CMAKE_SOURCE_DIR}/foster-btree/src
   ${CMAKE_SOURCE_DIR}/src/legacy
+  ${SQLITE3_INCLUDE_DIRS}
 )
 
 set(legacy_SRCS
@@ -11,8 +16,6 @@ set(legacy_SRCS
 
 add_library(legacy STATIC ${legacy_SRCS})
 
-# target_link_libraries(fineline
-#     lib1
-#     lib2
-#     )
+set(LIBS ${LIBS} ${SQLITE3_LIBRARIES})
 
+target_link_libraries(legacy ${LIBS})
