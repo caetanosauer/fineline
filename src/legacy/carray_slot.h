@@ -49,6 +49,8 @@
 #ifndef FINELINE_LEGACY_CARRAY_SLOT_H
 #define FINELINE_LEGACY_CARRAY_SLOT_H
 
+#include <atomic>
+
 #include "mcs_lock.h"
 
 namespace fineline {
@@ -61,7 +63,7 @@ namespace legacy {
  * Each slot belongs to two mcs_lock queues, one for buffer acquisition (me/_insert_lock)
  * and another for buffer release (me2/_expose_lock).
  */
-struct BaseCArraySlot alignas (CACHELINE_SIZE)
+struct alignas(CACHELINE_SIZE) BaseCArraySlot
 {
     using StatusType = int64_t;
 
@@ -79,7 +81,7 @@ struct BaseCArraySlot alignas (CACHELINE_SIZE)
      * This is the key variable used for every atomic operation of C-array slot.
      * @see carray_status_t
      */
-    StatusType status;
+    std::atomic<StatusType> status;
 
     /**
     * The main queue lock used to acquire log buffers.

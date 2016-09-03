@@ -194,7 +194,7 @@ struct mcs_lock {
 };
 
 /** Used to keep mcs_lock in its own cacheline. */
-const size_t CACHELINE_MCS_PADDING = CACHELINE_SIZE - sizeof(mcs_lock);
+constexpr size_t CACHELINE_MCS_PADDING = CACHELINE_SIZE - sizeof(mcs_lock);
 
 } // namespace legacy
 } // namespace fineline

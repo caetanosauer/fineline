@@ -116,8 +116,6 @@ namespace legacy {
 
 using foster::assert;
 
-const bool CARRAY_RELEASE_DELEGATION = true;
-
 /**
  * \brief The implementation class of \b Consolidation \b Array.
  * \ingroup CARRAY
@@ -131,38 +129,32 @@ public:
     using StatusType = typename CArraySlot::StatusType;
 
     /** @param[in] active_slot_count Max number of slots that can be active at the same time */
-    ConsolidationArray(int active_slot_count);
+    ConsolidationArray(int active_slot_count = 3);
     ~ConsolidationArray();
 
-    /** Constant numbers. */
-    enum Constants {
-        /** Total number of slots. */
-        ALL_SLOT_COUNT      = 256,
+    /** Total number of slots. */
+    static constexpr StatusType ALL_SLOT_COUNT      = 256;
 
-        /** Default value for max number of slots that can be active at the same time. */
-        DEFAULT_ACTIVE_SLOT_COUNT   = 3,
-
-        /**
-        * slots that are in active slots and up for grab have this StatusType.
-        */
-        SLOT_AVAILABLE      = 0,
-        /**
-        * slots that are in the pool but not in active slots
-        * have this StatusType.
-        */
-        SLOT_UNUSED         = -1,
-        /**
-        * Once the first thread in the slot puts this as StatusType, other threads can no
-        * longer join the slot.
-        */
-        SLOT_PENDING        = -2,
-        /**
-        * Once the first thread acquires a buffer space and LSN, it puts this \b MINUS
-        * the combined log size as the StatusType. All threads in the slot atomically add
-        * its log size to this, making the last one notice that it is exactly SLOT_FINISHED.
-        */
-        SLOT_FINISHED       = -4,
-    };
+    /**
+     * slots that are in active slots and up for grab have this StatusType.
+     */
+    static constexpr StatusType SLOT_AVAILABLE      = 0;
+    /**
+     * slots that are in the pool but not in active slots
+     * have this StatusType.
+     */
+    static constexpr StatusType SLOT_UNUSED         = -1;
+    /**
+     * Once the first thread in the slot puts this as StatusType, other threads can no
+     * longer join the slot.
+     */
+    static constexpr StatusType SLOT_PENDING        = -2;
+    /**
+     * Once the first thread acquires a buffer space and LSN, it puts this \b MINUS
+     * the combined log size as the StatusType. All threads in the slot atomically add
+     * its log size to this, making the last one notice that it is exactly SLOT_FINISHED.
+     */
+    static constexpr StatusType SLOT_FINISHED       = -4;
 
     static_assert(sizeof(CArraySlot) % CACHELINE_SIZE == 0,
        "size of CArraySlot must be aligned to CACHELINE_SIZE for better performance");
@@ -182,27 +174,10 @@ public:
     void                join_expose(CArraySlot* slot);
 
     /**
-     * Atomically checks if the slot has a successor slot that delegated its release to this
-     * slot, returning the "next" slot to expose. No matter whether there is "next",
-     * this slot is atomically freed from the expose chain.
-     * See Section A.3 of Aether paper.
-     * @return NULL if no one delegated, a delegated slot otherwise.
-     */
-    CArraySlot*         grab_delegated_expose(CArraySlot* slot);
-
-    /**
      * Spins until the leader of the given slot acquires log buffer.
      * @pre current thread is not the leader of the slot
      */
     void                wait_for_leader(CArraySlot* slot);
-
-    /**
-     * Tries to delegate the buffer release of this slot to slowly-moving predecessor
-     * if there is.
-     * @return true if we successfully delegated our dirty work to the poor predecessor.
-     * @pre current thread is the leader of the slot
-     */
-    bool                wait_for_expose(CArraySlot* slot);
 
     /**
      * Retire the given slot from active slot, upgrading an unused thread to an active slot.
@@ -213,20 +188,37 @@ public:
      */
     void                replace_active_slot(CArraySlot* slot);
 
-    StatusType get_and_disable(CArraySlot* cslot)
+    /**
+     * Set the status of the given slot to UNUSED, making it eligible for new inserts.
+     */
+    void free_slot(CArraySlot* cslot)
     {
-        return std::atomic_exchange_explicit(&cslot->status, SLOT_PENDING);
+        cslot->status = SLOT_UNUSED;
     }
 
-    void set_finished(CArraySlot* cslot, StatusType reserved)
+    StatusType fetch_slot_status(CArraySlot* cslot)
     {
-        std::atomic_thread_fence(std::memory_order_seq_cst);
+        return std::atomic_exchange(&cslot->status, SLOT_PENDING);
+    }
+
+    void finish_slot_reservation(CArraySlot* cslot, StatusType reserved)
+    {
         cslot->status = SLOT_FINISHED - reserved;
     }
 
-    StatusType release(CArraySlot* cslot, StatusType reserved)
+    StatusType leave_slot(CArraySlot* cslot, StatusType reserved)
     {
         return std::atomic_fetch_add(&cslot->status, reserved);
+    }
+
+    static bool is_last_to_leave(StatusType prev_status, StatusType reserved)
+    {
+        return prev_status + reserved == SLOT_FINISHED;
+    }
+
+    static bool is_leader(StatusType prev_status)
+    {
+        return prev_status == SLOT_AVAILABLE;
     }
 
 private:
@@ -235,25 +227,18 @@ private:
         return slot - _all_slots;
     }
 
-    struct alignas(CACHELINE_SIZE) {
-        /**
-         * Clockhand of active slots. We use this to evenly distribute accesses to slots.
-         * This value is not protected at all because we don't care even if it's not
-         * perfectly even. We anyway atomically obtain the slot.
-         */
-        int32_t             _slot_mark;
-        /** Max number of slots that can be active at the same time. */
-        const int32_t       _active_slot_count;
-        /** All slots, including available, currently used, or retired slots. */
-        CArraySlot          _all_slots[ALL_SLOT_COUNT];
-        /** Active slots that are (probably) up for grab or join. */
-        CArraySlot**        _active_slots;
-    };
-
     /**
-     * \brief Lock to protect threads releasing their log buffer.
+     * Clockhand of active slots. We use this to evenly distribute accesses to slots.
+     * This value is not protected at all because we don't care even if it's not
+     * perfectly even. We anyway atomically obtain the slot.
      */
-    mcs_lock            _expose_lock;
+    int32_t _slot_mark {0};
+    /** Max number of slots that can be active at the same time. */
+    const int32_t _active_slot_count;
+    /** All slots, including available, currently used, or retired slots. */
+    CArraySlot _all_slots[ALL_SLOT_COUNT];
+    /** Active slots that are (probably) up for grab or join. */
+    CArraySlot** _active_slots;
 };
 
 } // namespace legacy

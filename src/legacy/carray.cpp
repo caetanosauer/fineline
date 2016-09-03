@@ -55,35 +55,14 @@ template <class CArraySlot>
 void ConsolidationArray<CArraySlot>::wait_for_leader(CArraySlot* info) {
     long old_count;
     while( (old_count=info->status) >= SLOT_FINISHED);
-    lintel::atomic_thread_fence(lintel::memory_order_acquire);
-}
-
-template <class CArraySlot>
-bool ConsolidationArray<CArraySlot>::wait_for_expose(CArraySlot* info) {
-    assert<1>(SLOT_FINISHED == info->status);
-    assert<1>(CARRAY_RELEASE_DELEGATION);
-    lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
-    // If there is a predecessor which is still running,
-    // let's try to delegate the work of releasing the buffer
-    // to the slow predecessor. 1/32 to stop too long chains.
-    const int TERMINATE_CHAIN_POSSIBILITY = 32;
-    if(info->pred2 && (_indexof(info) % TERMINATE_CHAIN_POSSIBILITY) != 0) {
-        lintel::atomic_thread_fence(lintel::memory_order_release);
-        // Atomically change my status to DELEGATED.
-        int64_t waiting_cas_tmp = QNODE_WAITING._combined;
-        if(info->me2._status._combined == QNODE_WAITING._combined &&
-            lintel::unsafe::atomic_compare_exchange_strong<int64_t>(
-                &info->me2._status._combined, &waiting_cas_tmp, QNODE_DELEGATED._combined)) {
-            return true; // delegate succeeded
-        }
-    }
-    _expose_lock.__unsafe_end_acquire(&info->me2, info->pred2);
-    return false;
+    // TODO: probably not needed because info->status is atomic
+    // std::atomic_thread_fence(std::memory_order_acquire);
 }
 
 template <class CArraySlot>
 ConsolidationArray<CArraySlot>::ConsolidationArray(int active_slot_count)
-    : _slot_mark(0), _active_slot_count(active_slot_count) {
+    : _active_slot_count(active_slot_count)
+{
     // Zero-out all slots
     ::memset(_all_slots, 0, sizeof(CArraySlot) * ALL_SLOT_COUNT);
     typedef CArraySlot* CArraySlotPtr;
@@ -97,6 +76,7 @@ ConsolidationArray<CArraySlot>::ConsolidationArray(int active_slot_count)
         _active_slots[i]->status = SLOT_AVAILABLE;
     }
 }
+
 template <class CArraySlot>
 ConsolidationArray<CArraySlot>::~ConsolidationArray() {
     delete[] _active_slots;
@@ -132,7 +112,7 @@ CArraySlot* ConsolidationArray<CArraySlot>::join_slot(int32_t size, StatusType &
             // set to 'available' and add our size to the slot
             StatusType new_count = old_count + size;
             StatusType old_count_cas_tmp = old_count;
-            if(lintel::unsafe::atomic_compare_exchange_strong(
+            if(std::atomic_compare_exchange_strong(
                 &info->status, &old_count_cas_tmp, new_count))
             {
                 // CAS succeeded. All done.
@@ -158,69 +138,6 @@ CArraySlot* ConsolidationArray<CArraySlot>::join_slot(int32_t size, StatusType &
             }
         }
     }
-}
-
-template <class CArraySlot>
-void ConsolidationArray<CArraySlot>::join_expose(CArraySlot* info) {
-    if (CARRAY_RELEASE_DELEGATION) {
-        info->me2._status.individual._delegated = 0;
-        info->pred2 = _expose_lock.__unsafe_begin_acquire(&info->me2);
-    }
-}
-
-template <class CArraySlot>
-CArraySlot* ConsolidationArray<CArraySlot>::grab_delegated_expose(CArraySlot* info) {
-    // Four cases to consider
-    // 1. Delegated
-    // 2. Delegating
-    // 3. Spinning (can't delegate)
-    // 4. Busy
-    assert<1>(SLOT_FINISHED == info->status);
-    if (CARRAY_RELEASE_DELEGATION) {
-        lintel::atomic_thread_fence(lintel::memory_order_release);
-        // did next (predecessor in terms of logging) delegate to us?
-        mcs_lock::qnode *next = info->me2._next;
-        if (!next) {
-            // the above fast check is not atomic if someone else is now connecting.
-            // (if it's already connected, as 8-byte read is at least regular, safe)
-            // So, additional atomic CAS to make sure we really don't have next.
-            mcs_lock::qnode* me2_cas_tmp = &(info->me2);
-            if (!lintel::unsafe::atomic_compare_exchange_strong<mcs_lock::qnode*>(
-                &_expose_lock._tail, &me2_cas_tmp, (mcs_lock::qnode*) nullptr)) {
-                // CAS failed, so someone just connected to us.
-                assert<1>(_expose_lock._tail != info->me2);
-                assert<1>(info->me2._next != nullptr);
-                next = _expose_lock.spin_on_next(&info->me2);
-            } else {
-                // CAS succeeded, so we removed ourself from _expose_lock!
-            }
-        }
-
-        if (next) {
-            // This is safe because me2 is the first element
-            CArraySlot* next_i = reinterpret_cast<CArraySlot*>(next);
-            assert<1>(&next_i->me2 == next);
-
-            // if the next says it's delegated, we take it over.
-            int64_t status_cas_tmp = QNODE_WAITING._combined;
-            lintel::unsafe::atomic_compare_exchange_strong<int64_t>(
-                &(next_i->me2._status._combined), &status_cas_tmp, QNODE_IDLE._combined);
-            if (status_cas_tmp == QNODE_DELEGATED._combined) {
-                // they delegated... up to us to do their dirty work
-                assert<1>(SLOT_FINISHED == next_i->status);
-                assert<1>(next_i->pred2 == &info->me2);
-                lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
-                info->status = SLOT_UNUSED;
-                info = next_i;
-                return info;
-            }
-        }
-    }
-
-    // if I get here I hit nullptr or non-delegate[ed|able] node, so we are done.
-    lintel::atomic_thread_fence(lintel::memory_order_seq_cst);
-    info->status = SLOT_UNUSED;
-    return nullptr;
 }
 
 template <class CArraySlot>
