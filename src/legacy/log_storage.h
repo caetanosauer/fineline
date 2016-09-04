@@ -1,4 +1,25 @@
 /*
+ * MIT License
+ *
+ * Copyright (c) 2016 Caetano Sauer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/*
  * (c) Copyright 2011-2014, Hewlett-Packard Development Company, LP
  */
 
@@ -54,93 +75,85 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 
 */
 
-#ifndef LOG_STORAGE_H
-#define LOG_STORAGE_H
-#include "w_defines.h"
+#ifndef FINELINE_LEGACY_LOG_STORAGE_H
+#define FINELINE_LEGACY_LOG_STORAGE_H
 
-#include "sm_options.h"
-#include <partition.h>
 #include <map>
 #include <vector>
 #include <memory>
 #include <mutex>
 #include <condition_variable>
 
-typedef    smlevel_0::partition_number_t partition_number_t;
-typedef std::map<partition_number_t, shared_ptr<partition_t>> partition_map_t;
-
 #define BOOST_FILESYSTEM_NO_DEPRECATED
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 
-class skip_log;
-class partition_recycler_t;
+#include "partition.h"
+#include "latch_mutex.h"
 
+namespace fineline {
+namespace legacy {
+
+template <class> class file_recycler_t;
+
+template <size_t PageSize>
 class log_storage {
 
-    typedef smlevel_0::fileoff_t fileoff_t;
-
-    // use friend mechanism until better interface is implemented
-    friend class partition_t;
-    friend class partition_recycler_t;
+    friend class file_recycler_t<log_storage<PageSize>>;
 
 public:
-    log_storage(const sm_options&);
+    using LogFile = log_file<PageSize>;
+    using FileNumber = typename LogFile::FileNumber;
+    using FileHighNumber = typename FileNumber::HighType;
+    using FileLowNumber = typename FileNumber::LowType;
+    using FileMap = std::map<FileNumber, std::shared_ptr<LogFile>>;
+    using CurrentFileMap = std::map<FileHighNumber, std::shared_ptr<LogFile>>;
+
+    log_storage(std::string logdir, bool reformat, bool file_size, unsigned max_files,
+        bool delete_old_files);
     virtual ~log_storage();
 
-    shared_ptr<partition_t>    get_partition_for_flush(lsn_t start_lsn,
-                            long start1, long end1, long start2, long end2);
-    shared_ptr<partition_t>    curr_partition() const;
+    std::shared_ptr<LogFile> get_file_for_flush(FileHighNumber);
+    std::shared_ptr<LogFile> curr_file(FileHighNumber) const;
+    std::shared_ptr<LogFile> get_file(FileNumber n) const;
 
-    shared_ptr<partition_t>       get_partition(partition_number_t n) const;
+    string make_log_name(FileNumber fnum) const;
+    fs::path make_log_path(FileNumber fnum) const;
 
-    // used by partition_t
-    skip_log*       get_skip_log()  { return _skip_log; }
+    void wakeup_recycler();
+    unsigned delete_old_files();
 
-    fileoff_t get_partition_size() const { return _partition_size; }
-
-    string make_log_name(partition_number_t pnum) const;
-    fs::path make_log_path(partition_number_t pnum) const;
-    fs::path make_chkpt_path(lsn_t lsn) const;
-
-    void add_checkpoint(lsn_t lsn);
-
-    void wakeup_recycler(bool chkpt_only = false);
-    unsigned delete_old_partitions(bool chkpt_only = false, partition_number_t older_than = 0);
+    size_t get_file_size() const { return _file_size; }
 
 private:
-    shared_ptr<partition_t> create_partition(partition_number_t pnum);
+    std::shared_ptr<LogFile> create_file(FileNumber pnum);
 
     fs::path _logpath;
-    fileoff_t _partition_size;
+    size_t _file_size;
 
-    partition_map_t _partitions;
-    shared_ptr<partition_t> _curr_partition;
+    FileMap _files;
+    CurrentFileMap _current;
 
-    vector<lsn_t> _checkpoints;
-
-    skip_log* _skip_log;
-
-    unsigned _max_partitions;
-    bool _delete_old_partitions;
+    unsigned _max_files;
+    bool _delete_old_files;
 
     // forbid copy
-    log_storage(const log_storage&);
-    log_storage& operator=(const log_storage&);
+    log_storage<PageSize>(const log_storage<PageSize>&);
+    log_storage<PageSize>& operator=(const log_storage<PageSize>&);
 
-    void try_delete(partition_number_t);
+    void try_delete();
 
     // Latch to protect access to partition map
-    mutable mcs_rwlock _partition_map_latch;
+    foster::MutexLatch _file_map_latch;
 
-    unique_ptr<partition_recycler_t> _recycler_thread;
+    std::unique_ptr<file_recycler_t<log_storage<PageSize>>> _recycler_thread;
 
 public:
-    enum { BLOCK_SIZE = partition_t::XFERSIZE };
     static const string log_prefix;
     static const string log_regex;
-    static const string chkpt_prefix;
-    static const string chkpt_regex;
 };
+
+} // namespace legacy
+} // namespace fineline
 
 #endif

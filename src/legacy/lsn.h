@@ -190,9 +190,10 @@ public:
     HighType hi() const { return _data >> BitsLow; }
     LowType lo() const { return _data & LowMask; }
 
-    UnsignedNumberPair<BitsHigh, BitsLow>& advance(int amt)
+    UnsignedNumberPair<BitsHigh, BitsLow>& advance(int amt = 1)
     {
-        _data += amt; return *this;
+        _data += amt;
+        return *this;
     }
 
     UnsignedNumberPair<BitsHigh, BitsLow> &operator+=(long delta)

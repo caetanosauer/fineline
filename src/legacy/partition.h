@@ -1,4 +1,25 @@
 /*
+ * MIT License
+ *
+ * Copyright (c) 2016 Caetano Sauer
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+ * associated documentation files (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or
+ * substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+ * NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+ * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ */
+
+/*
  * (c) Copyright 2011-2013, Hewlett-Packard Development Company, LP
  */
 
@@ -55,71 +76,72 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 
 */
 
-#ifndef PARTITION_H
-#define PARTITION_H
-#include "w_defines.h"
+#ifndef FINELINE_LEGACY_LOG_FILE_H
+#define FINELINE_LEGACY_LOG_FILE_H
 
-#include "logrec.h"
+#include <memory>
+#include <atomic>
 #include <mutex>
 
+#include "lsn.h"
+
+namespace fineline {
+namespace legacy {
+
+template <size_t>
 class log_storage; // forward
 
-class partition_t {
+template<size_t PageSize>
+class log_file {
 public:
-    typedef smlevel_0::fileoff_t          fileoff_t;
-    typedef smlevel_0::partition_number_t partition_number_t;
+    using BlockOffset = uint32_t;
 
-    enum { XFERSIZE = 8192 };
-    enum { invalid_fhdl = -1 };
+    /*
+     * Log file number consists of 2 parts: the high bits represent the merge depth; it is zero for
+     * files where log pages are appended directly, and N > 0 for files created by merging files of
+     * depth N-1. This mechanism makes it easy to manage files for partitions in different levels.
+     */
+    static constexpr size_t FileHighNumBits = 8;
+    static constexpr size_t FileLowNumBits = 24;
+    using FileNumber = UnsignedNumberPair<FileHighNumBits, FileLowNumBits>;
 
-    partition_t(log_storage*, partition_number_t);
-    virtual ~partition_t() { }
+    static constexpr int invalid_fhdl = -1;
 
-    partition_number_t num() const   { return _num; }
+    log_file(std::shared_ptr<log_storage<PageSize>>, FileNumber);
+    virtual ~log_file() { }
 
-    rc_t open_for_append();
-    rc_t open_for_read();
-    rc_t close_for_append();
-    rc_t close_for_read();
+    void open_for_append();
+    void open_for_read();
+    void close_for_append();
+    void close_for_read();
 
-    rc_t read(logrec_t *&r, lsn_t &ll, lsn_t* prev_lsn = NULL);
-    void release_read();
+    void read(BlockOffset, void* dest);
+    void append(void* src);
 
-    rc_t flush(lsn_t lsn, const char* const buf, long start1, long end1,
-            long start2, long end2);
+    size_t get_size();
 
-    bool is_open_for_read() const
-    {
-        return (_fhdl_rd != invalid_fhdl);
-    }
-
-    bool is_open_for_append() const
-    {
-        return (_fhdl_app != invalid_fhdl);
-    }
-
-    size_t get_size(bool must_be_skip = true);
-
-    void set_size(size_t size) { _size = size; }
-
-    rc_t prime_buffer(char* buffer, lsn_t lsn, size_t& prime_offset);
+    void scan_for_size();
 
     void destroy();
 
+    FileNumber num() const { return _num; }
+
+    bool is_open_for_read() const { return (_fhdl_rd != invalid_fhdl); }
+
+    bool is_open_for_append() const { return (_fhdl_app != invalid_fhdl); }
+
+    void set_size(size_t s) { _size = s; }
+
 private:
-    partition_number_t    _num;
-    log_storage*          _owner;
-    long                  _size;
-    int                   _fhdl_rd;
-    int                   _fhdl_app;
-    static int            _artificial_flush_delay;  // in microseconds
-    char*                 _readbuf;
-
-    void             fsync_delayed(int fd);
-    rc_t scan_for_size(bool must_be_skip);
-
-    // Serialize read calls, which use the same buffer
-    mutex _read_mutex;
+    FileNumber _num;
+    std::shared_ptr<log_storage<PageSize>> _owner;
+    std::atomic<size_t> _size;
+    int _fhdl_rd;
+    int _fhdl_app;
+    std::mutex _mutex;
 };
+
+} // namespace legacy
+} // namespace fineline
 
 #endif
