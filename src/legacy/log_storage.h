@@ -88,7 +88,7 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 #include <boost/filesystem.hpp>
 namespace fs = boost::filesystem;
 
-#include "partition.h"
+#include "log_file.h"
 #include "latch_mutex.h"
 
 namespace fineline {

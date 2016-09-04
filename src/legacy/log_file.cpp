@@ -75,7 +75,7 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 
 */
 
-#include "partition.h"
+#include "log_file.h"
 
 #include <sys/stat.h>
 #include <stdexcept>

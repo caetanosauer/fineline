@@ -13,7 +13,7 @@ INCLUDE_DIRECTORIES (
 set(legacy_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/lsn.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/carray.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/partition.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/log_file.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/log_storage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/log_sqlite.cpp
 )
