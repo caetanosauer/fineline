@@ -72,22 +72,27 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 */
 
 #include "lsn.h"
-#include "mcs_lock.h"
 
 #include <sstream>
+#include <limits>
 
 namespace fineline {
 namespace legacy {
 
-const lsn_t lsn_t::null(0, 0);
-const lsn_t lsn_t::max(lsn_t::file_hwm, lsn_t::mask());
+template <size_t H, size_t L>
+const UnsignedNumberPair<H, L> UnsignedNumberPair<H, L>::null{0};
 
-std::string lsn_t::str()
+template <size_t H, size_t L>
+const UnsignedNumberPair<H, L> UnsignedNumberPair<H, L>::max
+    { std::numeric_limits<NumType>::max() };
+
+template <size_t H, size_t L>
+std::string UnsignedNumberPair<H, L>::str() const
 {
     std::stringstream ss;
     ss << *this;
     return ss.str();
 }
 
-}
-}
+} // namespace legacy
+} // namespace fineline
