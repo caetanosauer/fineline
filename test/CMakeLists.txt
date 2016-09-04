@@ -1,11 +1,10 @@
 INCLUDE_DIRECTORIES (
-  ${CMAKE_SOURCE_DIR}/src
-  ${CMAKE_SOURCE_DIR}/foster-btree/src
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/foster-btree/src
+    ${CMAKE_SOURCE_DIR}/foster-btree/third-party/googletest/googletest/include
 ) 
 
 ENABLE_TESTING()
-
-INCLUDE_DIRECTORIES (${CMAKE_SOURCE_DIR}/foster-btree/third-party/googletest/googletest/include)
 
 add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
 
@@ -25,3 +24,4 @@ FUNCTION (X_ADD_TESTCASE targetname the_libraries)
 ENDFUNCTION()
 
 X_ADD_TESTCASE(test_node_logging fineline)
+X_ADD_TESTCASE(test_legacy_log_sqlite legacy)
