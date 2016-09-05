@@ -116,7 +116,7 @@ public:
     void close_for_read();
 
     void read(BlockOffset, void* dest);
-    void append(void* src);
+    BlockOffset append(void* src);
 
     size_t get_size();
 

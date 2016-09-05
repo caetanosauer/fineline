@@ -194,11 +194,14 @@ void log_file<PageSize>::scan_for_size()
 }
 
 template<size_t PageSize>
-void log_file<PageSize>::append(void* src)
+typename log_file<PageSize>::BlockOffset log_file<PageSize>::append(void* src)
 {
     assert<1>(is_open_for_append());
 
     check_error(::fsync(_fhdl_app));
+
+    _size += PageSize;
+    return _size - PageSize;
 }
 
 template<size_t PageSize>

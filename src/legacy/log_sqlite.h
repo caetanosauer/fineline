@@ -22,13 +22,18 @@
 #ifndef FINELINE_LEGACY_LOG_SQLITE_H
 #define FINELINE_LEGACY_LOG_SQLITE_H
 
+#include <memory>
+
 #include "assertions.h"
+#include "log_storage.h"
 
 struct sqlite3;
 struct sqlite3_stmt;
 
 namespace fineline {
 namespace legacy {
+
+using foster::assert;
 
 class SQLiteIndexedLog
 {
@@ -55,6 +60,46 @@ private:
     sqlite3* db_;
     sqlite3_stmt* insert_stmt_;
     std::string db_path_;
+};
+
+template <class LogPage>
+class SQLiteLogAdapter
+{
+public:
+    using LogStorage = log_storage<sizeof(LogPage)>;
+    using LogKey = typename LogPage::Key;
+
+    static constexpr unsigned FirstLevelFile = 0;
+
+    SQLiteLogAdapter()
+    {
+        // TODO: add option mechanism -- most likely boost
+        std::string logdir = "logdir";
+        bool reformat = true;
+        unsigned file_size = 1024;
+        unsigned max_files = 0;
+        bool delete_old = false;
+
+        storage_.reset(new LogStorage {logdir, reformat, file_size, max_files, delete_old});
+        index_.reset(new SQLiteIndexedLog {storage_->get_sqlite_db_path()});
+    }
+
+    void append_page(const LogPage& page)
+    {
+        assert<3>(page.slots_are_sorted());
+        LogKey min_key = page.get_slot(0).key;
+        LogKey max_key = page.get_slot(page.slot_count() - 1).key;
+
+        auto file = storage_->get_file_for_flush(FirstLevelFile);
+        // TODO we may crash after appending page but before inserting index info!
+        size_t offset = file->append(&page);
+        index_->insert_block(file->num(), offset, min_key.node_id, max_key.node_id);
+    }
+
+private:
+
+    std::unique_ptr<LogStorage> storage_;
+    std::unique_ptr<SQLiteIndexedLog> index_;
 };
 
 } // namespace legacy

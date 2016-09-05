@@ -43,6 +43,7 @@ using foster::ExclusiveLatchContext;
 
 template <size_t P> const string log_storage<P>::log_prefix = "log.";
 template <size_t P> const string log_storage<P>::log_regex = "log\\.[0-9]+.[1-9][0-9]*";
+template <size_t P> const string log_storage<P>::sqlite_db_name = "index.db";
 
 template <class LogStorage>
 class file_recycler_t
@@ -292,6 +293,12 @@ std::shared_ptr<log_file<P>> log_storage<P>::curr_file(FileHighNumber level) con
     auto it = _current.find(level);
     if (it == _current.end()) { return nullptr; }
     return *it;
+}
+
+template <size_t P>
+string log_storage<P>::get_sqlite_db_path() const
+{
+    return (_logpath / fs::path(sqlite_db_name)).string();
 }
 
 template <size_t P>

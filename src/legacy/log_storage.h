@@ -125,6 +125,8 @@ public:
 
     size_t get_file_size() const { return _file_size; }
 
+    string get_sqlite_db_path() const;
+
 private:
     std::shared_ptr<LogFile> create_file(FileNumber pnum);
 
@@ -151,6 +153,7 @@ private:
 public:
     static const string log_prefix;
     static const string log_regex;
+    static const string sqlite_db_name;
 };
 
 } // namespace legacy
