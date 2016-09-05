@@ -45,10 +45,12 @@ public:
 
     void commit()
     {
+        // TODO
     }
 
     void abort()
     {
+        // TODO
     }
 
     template <class... Args>
