@@ -33,9 +33,9 @@ const char* SQLiteIndexedLogDDL =
     "create table if not exists logblocks ("
     "   file_number int,"
     "   block_number int,"
+    "   part_number unsigned big int,"
     "   min_key int,"
     "   max_key int,"
-    "   merge_depth int,"
     "   bloom_filter blob(1024),"
     "   primary key(file_number, block_number)"
     ");"
@@ -89,15 +89,16 @@ void SQLiteIndexedLog::finalize()
     sqlite3_finalize(insert_stmt_);
 }
 
-void SQLiteIndexedLog::insert_block(int file, int block, int min, int max)
+void SQLiteIndexedLog::insert_block(uint32_t file, uint32_t block, uint64_t partition,
+        uint64_t min, uint64_t max)
 {
     sql_check(sqlite3_reset(insert_stmt_));
 
     sql_check(sqlite3_bind_int(insert_stmt_, 1, file));
     sql_check(sqlite3_bind_int(insert_stmt_, 2, block));
-    sql_check(sqlite3_bind_int(insert_stmt_, 3, min));
-    sql_check(sqlite3_bind_int(insert_stmt_, 4, max));
-    sql_check(sqlite3_bind_int(insert_stmt_, 5, 0));
+    sql_check(sqlite3_bind_int(insert_stmt_, 3, partition));
+    sql_check(sqlite3_bind_int(insert_stmt_, 4, min));
+    sql_check(sqlite3_bind_int(insert_stmt_, 5, max));
 
     int rc = SQLITE_BUSY;
     while (rc == SQLITE_BUSY) {

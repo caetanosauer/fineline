@@ -38,7 +38,8 @@ public:
 
     ~SQLiteIndexedLog();
 
-    void insert_block(int file, int block, int min, int max);
+    void insert_block(uint32_t file, uint32_t block, uint64_t partition,
+            uint64_t min, uint64_t max);
 
     sqlite3* get_db() { return db_; }
 

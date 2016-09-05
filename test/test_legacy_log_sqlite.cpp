@@ -52,13 +52,14 @@ constexpr char TestSQLite::DBFile[];
 
 TEST_F(TestSQLite, InsertionTest)
 {
-    std::array<std::tuple<int, int, int, int>, 3> tuples;
-    tuples[0] = std::make_tuple(1, 1, 10, 20);
-    tuples[1] = std::make_tuple(1, 2, 15, 25);
-    tuples[2] = std::make_tuple(2, 1, 10, 30);
+    std::array<std::tuple<uint32_t, uint32_t, uint64_t, uint64_t, uint64_t>, 3> tuples;
+    tuples[0] = std::make_tuple(1, 1, 0, 10, 20);
+    tuples[1] = std::make_tuple(1, 2, 0, 15, 25);
+    tuples[2] = std::make_tuple(2, 1, 0, 10, 30);
 
     for (auto t : tuples) {
-        log_->insert_block(std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t));
+        log_->insert_block(std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t),
+                std::get<4>(t));
     }
 
     auto db = log_->get_db();
@@ -66,7 +67,7 @@ TEST_F(TestSQLite, InsertionTest)
     int rc;
     sqlite3_stmt* stmt;
     rc = sqlite3_prepare_v2(db,
-            "select file_number, block_number, min_key, max_key "
+            "select file_number, block_number, part_number, min_key, max_key "
             "from logblocks order by file_number, block_number",
             -1, &stmt, 0);
     ASSERT_EQ(rc, SQLITE_OK);
@@ -79,6 +80,7 @@ TEST_F(TestSQLite, InsertionTest)
             EXPECT_EQ(sqlite3_column_int(stmt, 1), std::get<1>(tuples[i]));
             EXPECT_EQ(sqlite3_column_int(stmt, 2), std::get<2>(tuples[i]));
             EXPECT_EQ(sqlite3_column_int(stmt, 3), std::get<3>(tuples[i]));
+            EXPECT_EQ(sqlite3_column_int(stmt, 4), std::get<4>(tuples[i]));
             i++;
         }
     } while (rc == SQLITE_ROW || rc == SQLITE_BUSY);
