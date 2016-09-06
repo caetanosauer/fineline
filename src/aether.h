@@ -81,6 +81,17 @@ public:
         return epoch;
     }
 
+    EpochNumber force_current_page()
+    {
+        latch_.acquire_write();
+        // Simply request a new page, releasing the current one by decreasing its
+        // shared_ptr ref count. Once it reaches zero, flusher can pick it up.
+        EpochNumber epoch {0};
+        curr_page_ = buffer_->produce(epoch);
+        latch_.release_write();
+        return epoch;
+    }
+
     static Reservation encode_reservation(SlotNumber slot, size_t payload_count)
     {
         assert<1>(payload_count < (1ul << PayloadBits));

@@ -101,7 +101,7 @@ log_file<PageSize>::log_file(fs::path path, FileNumber num)
 template<size_t PageSize>
 void log_file<PageSize>::check_error(int res)
 {
-    if (res != 0) {
+    if (res < 0) {
         auto what = "I/O error! errno = " + std::to_string(errno);
         throw std::runtime_error(what);
     }
@@ -116,7 +116,7 @@ void log_file<PageSize>::open_for_append()
 
     int fd, flags = O_RDWR | O_CREAT;
     string fname = make_log_name();
-    fd = ::open(fname.c_str(), flags);
+    fd = ::open(fname.c_str(), flags, 0644);
     if (fd < 0) { throw std::runtime_error("Error opening log file"); }
     _fhdl_app = fd;
 }
@@ -199,19 +199,18 @@ typename log_file<PageSize>::BlockOffset log_file<PageSize>::append(const void* 
 {
     assert<1>(is_open_for_append());
 
+    BlockOffset offset = std::atomic_fetch_add(&_size, PageSize);
+    check_error(::pwrite(_fhdl_app, src, PageSize, offset));
     check_error(::fsync(_fhdl_app));
-    // TODO
-    (void) src;
 
-    _size += PageSize;
-    return _size - PageSize;
+    return offset;
 }
 
 template<size_t PageSize>
 void log_file<PageSize>::read(BlockOffset offset, void* dest)
 {
     assert<1>(is_open_for_read());
-
+    check_error(::pread(_fhdl_rd, dest, PageSize, offset));
 }
 
 template<size_t PageSize>

@@ -139,7 +139,7 @@ TEST(TestRedo, SimpleInsertionRedo)
     auto iter = ctx.get_plog()->iterate();
     while (iter->next(hdr, payload)) {
         auto lr = fineline::ConstructLogRec(hdr.type, node_r, payload);
-        std::cout << "REDOING " << *lr << std::endl;
+        // std::cout << "REDOING " << *lr << std::endl;
         lr->redo();
     }
 
@@ -151,6 +151,9 @@ TEST(TestRedo, SimpleInsertionRedo)
     ASSERT_TRUE(found); ASSERT_EQ(v, "value2");
     found = node_r.find("key3", &v);
     ASSERT_TRUE(found); ASSERT_EQ(v, "value3");
+
+    // ctx.commit();
+    // fineline::SysEnv::commit_buffer->force_current_page();
 }
 
 int main(int argc, char **argv)

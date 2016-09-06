@@ -41,10 +41,6 @@ using foster::assert;
 using foster::SharedLatchContext;
 using foster::ExclusiveLatchContext;
 
-template <size_t P> const string log_storage<P>::log_prefix = "log.";
-template <size_t P> const string log_storage<P>::log_regex = "log\\.[0-9]+.[1-9][0-9]*";
-template <size_t P> const string log_storage<P>::sqlite_db_name = "index.db";
-
 template <class LogStorage>
 class file_recycler_t
 {
@@ -136,7 +132,7 @@ log_storage<P>::log_storage(std::string logdir, bool reformat, unsigned file_siz
                 continue;
             }
 
-            std::stringstream ss {fname.substr(log_prefix.length())};
+            std::stringstream ss {fname.substr(string{log_prefix}.length())};
             FileNumber fnum;
             ss >> fnum;
 
@@ -186,7 +182,11 @@ template <size_t PageSize>
 std::shared_ptr<log_file<PageSize>> log_storage<PageSize>::get_file_for_flush(FileHighNumber level)
 {
     auto p = curr_file(level);
-    if (p->get_size() + PageSize > _file_size) {
+    if (!p.get()) {
+        p = create_file(FileNumber{level,1});
+        p->open_for_append();
+    }
+    else if (p->get_size() + PageSize > _file_size) {
         auto n = p->num();
         p->close_for_append();
         p = create_file(n.advance());

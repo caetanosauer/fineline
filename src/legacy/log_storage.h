@@ -144,9 +144,9 @@ private:
     file_recycler_t<log_storage<PageSize>> _recycler;
 
 public:
-    static const string log_prefix;
-    static const string log_regex;
-    static const string sqlite_db_name;
+    static constexpr auto log_prefix = "log.";
+    static constexpr auto log_regex = "log\\.[0-9][0-9]*\\.[1-9][0-9]*";
+    static constexpr auto sqlite_db_name = "index.db";
 };
 
 } // namespace legacy

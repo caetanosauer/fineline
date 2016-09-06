@@ -251,7 +251,7 @@ private:
 template <size_t H, size_t L>
 inline std::ostream& operator<<(std::ostream& o, const UnsignedNumberPair<H,L>& l)
 {
-    return o << l.hi() << '.' << l.lo();
+    return o << l.hi() + 0 << '.' << l.lo() + 0;
 }
 
 template <size_t H, size_t L>

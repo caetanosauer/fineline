@@ -143,7 +143,10 @@ public:
 
     fs::path make_log_path() const
     {
-        return _logpath / fs::path(log_storage<PageSize>::log_prefix + _num.str());
+        auto s = log_storage<PageSize>::log_prefix;
+        auto s2 = _num.str();
+        auto s3 = s + s2;
+        return _logpath / fs::path(s3);
     }
 
 private:
