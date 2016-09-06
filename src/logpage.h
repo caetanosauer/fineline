@@ -44,7 +44,7 @@ using foster::assert;
 template <typename... T>
 using LogEncoder = typename foster::VariadicEncoder<foster::InlineEncoder, T...>;
 
-// Default alignment = 1/4 of typical cache line (128b)
+// Default alignment = 1/2 of typical cache line (64B)
 constexpr size_t LogrecAlignment = 32;
 
 template <
@@ -68,6 +68,22 @@ struct alignas(LogrecAlignment) LogrecHeader
     SeqNum seq_num;
     LogrecLength length;
     LRType type;
+
+    friend bool operator<(
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
+    {
+        /*
+         * "raw" comparison operator that uses the binary contents for comparison in order to
+         * speed up sort and select operarions. This is also known as a "normalized key".
+         * Because I am not sure about the implications of different struct alignments, I am
+         * asserting that the two key fields are of the same size.
+         */
+        static_assert(sizeof(NodeId) == sizeof(SeqNum),
+                "LogrecHeader comparison currently requires the same types for NodeId and SeqNum");
+
+        return memcmp(&a, &b, sizeof(NodeId) + sizeof(SeqNum)) < 0;
+    }
 };
 
 template <class Key>
@@ -78,7 +94,7 @@ public:
 };
 
 template <size_t PageSize, class LogrecHeader>
-class LogPage : protected foster::SlotArray<LogrecHeader, PageSize>
+class LogPage : public foster::SlotArray<LogrecHeader, PageSize>
 {
 public:
     using Key = LogrecHeader;

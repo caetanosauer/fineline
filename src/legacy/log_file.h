@@ -120,7 +120,7 @@ public:
     void close_for_read();
 
     void read(BlockOffset, void* dest);
-    BlockOffset append(void* src);
+    BlockOffset append(const void* src);
 
     size_t get_size();
 

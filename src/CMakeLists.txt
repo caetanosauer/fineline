@@ -5,12 +5,13 @@ INCLUDE_DIRECTORIES (
 )
 
 set(fineline_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/fineline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/options.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/txncontext.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/threadlocal.cpp
 )
 
 add_library(fineline STATIC ${fineline_SRCS})
-# target_link_libraries(fineline
-#     lib1
-#     lib2
-#     )
+target_link_libraries(fineline
+    legacy
+    ${Boost_LIBRARIES}
+    )

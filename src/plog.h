@@ -29,10 +29,20 @@
 
 namespace fineline {
 
+/*
+ * TODO: At this point, I'm wondering if it wouldn't be easier to allocate larger pages when an
+ * overflow happens, similar to std::vector. Maintaining a list of overflowing pages makes quite
+ * a few things more cumbersome. For example, at commit time, we need to iterate over pages
+ * instead of simply copying a single page into the insert log buffer. On the other hand, the
+ * templates currently require a fixed-size log page. Making the size dynamic (like std::vector)
+ * would cause many other problems.
+ */
+
 template <class LogPage, class OverflowPlog>
 class TxnPrivateLog
 {
 public:
+    using LogPageType = LogPage;
     using Key = typename LogPage::Key;
 
     TxnPrivateLog()
@@ -65,6 +75,19 @@ public:
             return overflow_.iterate();
         }
         return page_.iterate();
+    }
+
+    template <class LogBuffer, class RetType>
+    void insert_into_buffer(LogBuffer* buffer, RetType& ret)
+    {
+        if (!has_overflown_) {
+            ret = buffer->insert(page_);
+        }
+        else {
+            for (auto p : overflow_.get_page_list()) {
+                ret = buffer->insert(*p);
+            }
+        }
     }
 
 protected:
@@ -170,6 +193,11 @@ public:
     std::unique_ptr<Iterator> iterate()
     {
         return std::unique_ptr<Iterator>{new Iterator{this}};
+    }
+
+    std::list<std::shared_ptr<LogPage>>& get_page_list()
+    {
+        return pages_;
     }
 
 protected:

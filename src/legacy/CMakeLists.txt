@@ -1,7 +1,6 @@
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 find_package(SQLite3 REQUIRED)
-find_package(Boost COMPONENTS regex system filesystem REQUIRED)
 
 INCLUDE_DIRECTORIES (
   ${CMAKE_SOURCE_DIR}/foster-btree/src

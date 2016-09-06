@@ -23,8 +23,9 @@
 #define FINELINE_LOGFLUSHER_H
 
 #include <mutex>
-#include <condition_variable>
 #include <atomic>
+#include <thread>
+#include <condition_variable>
 
 #include "assertions.h"
 
@@ -47,6 +48,15 @@ public:
             std::shared_ptr<PersistentLog<LogPage>> log)
         : buffer_(buffer), log_(log), hardened_epoch_(0), shutdown_(false)
     {
+        // Thread runs continuously -- no need for a wakeup/wait mechanism.
+        // It will wait on consume method of buffer anyway.
+        thread_.reset(new std::thread {&LogFlusher::main_loop, this});
+    }
+
+    ~LogFlusher()
+    {
+        shutdown();
+        thread_->join();
     }
 
     bool wait_until_hardened(EpochNumber epoch)
@@ -67,8 +77,9 @@ public:
         while (!shutdown_.load()) {
             EpochNumber epoch {0};
             auto page = buffer_->consume(epoch);
+            if (shutdown_.load()) { break; }
 
-            log_->append_page(page);
+            log_->append_page(*page);
 
             assert<0>(hardened_epoch_ + 1 == epoch, "Log flusher missed an epoch!");
             hardened_epoch_++;
@@ -80,10 +91,14 @@ public:
 
     void shutdown()
     {
+        std::unique_lock<std::mutex> lck {mutex_};
         shutdown_ = true;
+        // Flusher thread may be waiting on consume, so just insert an empty page (this seems
+        // easier than having a shutdown mechanism in the buffer.
+        EpochNumber epoch;
+        buffer_->produce(epoch);
+        cond_.notify_all();
     }
-
-protected:
 
 private:
     std::shared_ptr<Buffer<LogPage>> buffer_;
@@ -93,6 +108,7 @@ private:
 
     std::mutex mutex_;
     std::condition_variable cond_;
+    std::unique_ptr<std::thread> thread_;
 };
 
 } // namespace fineline

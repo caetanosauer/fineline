@@ -49,7 +49,7 @@ template <class LogStorage>
 class file_recycler_t
 {
 public:
-    file_recycler_t(std::shared_ptr<LogStorage> storage)
+    file_recycler_t(LogStorage* storage)
         : storage(storage), retire(false)
     {
     }
@@ -57,7 +57,10 @@ public:
     ~file_recycler_t()
     {
         retire = true;
-        if (_thread.get()) { _thread->join(); }
+        if (_thread.get()) {
+            wakeup();
+            _thread->join();
+        }
     }
 
     void run()
@@ -79,7 +82,7 @@ public:
         _cond.notify_one();
     }
 
-    std::shared_ptr<LogStorage> storage;
+    LogStorage* storage;
     std::atomic<bool> retire;
     std::condition_variable _cond;
     std::mutex _mutex;
@@ -95,7 +98,7 @@ public:
 template <size_t P>
 log_storage<P>::log_storage(std::string logdir, bool reformat, unsigned file_size, unsigned max_files,
         bool delete_old_files)
-    : _recycler(std::shared_ptr<log_storage<P>>(this))
+    : _recycler(this)
 {
     if (logdir.empty()) {
         throw std::runtime_error("ERROR: logdir must be set to enable logging.");
@@ -143,6 +146,9 @@ log_storage<P>::log_storage(std::string logdir, bool reformat, unsigned file_siz
             {
                 last_files[fnum.hi()] = fnum.lo();
             }
+        }
+        else if (fname == sqlite_db_name) {
+            // TODO
         }
         else {
             auto what = "log_storage: cannot parse filename " + fname;
@@ -292,7 +298,7 @@ std::shared_ptr<log_file<P>> log_storage<P>::curr_file(FileHighNumber level) con
     SharedLatchContext cs(&_file_map_latch);
     auto it = _current.find(level);
     if (it == _current.end()) { return nullptr; }
-    return *it;
+    return it->second;
 }
 
 template <size_t P>

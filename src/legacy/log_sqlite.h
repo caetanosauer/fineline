@@ -93,7 +93,12 @@ public:
         auto file = storage_->get_file_for_flush(FirstLevelFile);
         // TODO we may crash after appending page but before inserting index info!
         size_t offset = file->append(&page);
-        index_->insert_block(file->num(), offset, min_key.node_id, max_key.node_id);
+        // TODO we need a 64-bit PartitionNumber type
+        // with 8-bit merge depth and 56-bit partition number
+        // for depth=0, partition number is simple file_number (24-bit, FileNumber.lo())
+        // and block_number (32-bit)
+        uint64_t partition = (uint64_t(file->num().data()) << 32) & offset;
+        index_->insert_block(file->num().data(), offset, partition, min_key.node_id, max_key.node_id);
     }
 
 private:

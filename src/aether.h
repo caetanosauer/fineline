@@ -132,11 +132,8 @@ protected:
     {
         // Step 1) make sure current page exists and has enough space
         auto space_needed = get_reservation_bytes(to_reserve);
-        if (space_needed > curr_page_->free_space()) {
+        if (!curr_page_ || space_needed > curr_page_->free_space()) {
             // release current page and get new one
-            curr_page_.reset();
-        }
-        if (!curr_page_) {
             curr_page_ = buffer_->produce(cslot->epoch);
         }
         assert<1>(curr_page_.get());

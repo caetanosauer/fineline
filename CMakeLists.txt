@@ -73,14 +73,14 @@ ENDIF ()
 INCLUDE (TestBigEndian)
 TEST_BIG_ENDIAN(WORDS_BIGENDIAN)
 
+find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
+
 # Subdirectories
 add_subdirectory(src)
 add_subdirectory(src/legacy)
 add_subdirectory(test EXCLUDE_FROM_ALL)
 add_subdirectory(foster-btree/third-party/googletest EXCLUDE_FROM_ALL)
 # add_subdirectory(bench EXCLUDE_FROM_ALL)
-
-find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)

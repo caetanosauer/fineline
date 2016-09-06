@@ -156,6 +156,7 @@ TEST(TestRedo, SimpleInsertionRedo)
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
+    fineline::init();
     return RUN_ALL_TESTS();
 }
 

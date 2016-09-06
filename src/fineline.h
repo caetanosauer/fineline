@@ -22,19 +22,29 @@
 #ifndef FINELINE_FINELINE_H
 #define FINELINE_FINELINE_H
 
+#include "options.h"
 #include "logpage.h"
 #include "plog.h"
 #include "txncontext.h"
 #include "logger.h"
 #include "logrec.h"
+#include "ringbuffer.h"
+#include "aether.h"
+#include "logflusher.h"
+#include "latch_mutex.h"
+#include "legacy/carray.h"
+#include "legacy/log_sqlite.h"
 
 namespace fineline {
+
+class SysEnv;
 
 /*
  * COMPILE-TIME CONSTANTS
  */
 constexpr size_t LogPageSize = 8192;
 constexpr size_t ExtLogPageSize = 1048576; // 1MB
+constexpr size_t LogBufferSize = 24; // 24 log pages
 
 using NodeIdType = uint32_t;
 using SeqNumType = uint32_t;
@@ -45,11 +55,61 @@ using DftLogPage = LogPage<LogPageSize, DftLogrecHeader>;
 using ExtLogPage = LogPage<ExtLogPageSize, DftLogrecHeader>;
 using OverflowPlog = ChainedPagesPrivateLog<ExtLogPage>;
 using DftPlog = TxnPrivateLog<DftLogPage, OverflowPlog>;
-using DftTxnContext = ThreadLocalTxnContext<BaseTxnContext<DftPlog>>;
+
+template <class P>
+using DftLogBufferTemp = AsyncRingBuffer<P, LogBufferSize>;
+using DftLogBuffer = AsyncRingBuffer<ExtLogPage, LogBufferSize>;
+using DftCommitBuffer = AetherInsertBuffer<ExtLogPage, foster::MutexLatch,
+      DftLogBufferTemp, legacy::ConsolidationArray>;
+template <class P>
+using DftPersistentLogTemp = legacy::SQLiteLogAdapter<P>;
+using DftPersistentLog = legacy::SQLiteLogAdapter<ExtLogPage>;
+using DftLogFlusher = LogFlusher<ExtLogPage, DftLogBufferTemp, DftPersistentLogTemp>;
+
+using DftTxnContext = ThreadLocalScope<TxnContext<DftPlog, SysEnv>>;
 using DftLogger = TxnLogger<DftTxnContext, DftLogrecHeader>;
 
+/*
+ * Global function that initializes the global static SysEnv members with system components of
+ * the default types specified above.
+ */
+void init(const Options& = Options{});
+
+class SysEnv
+{
+public:
+    using EpochNumber = typename DftLogFlusher::EpochNumber;
+
+    static void initialize(const Options& opt)
+    {
+        std::unique_lock<std::mutex> lck {init_mutex_};
+        if (!initialized_) {
+            do_init(opt);
+            initialized_ = true;
+        }
+    }
+
+    static std::shared_ptr<DftCommitBuffer> commit_buffer;
+    static std::shared_ptr<DftLogBuffer> log_buffer;
+    static std::shared_ptr<DftLogFlusher> log_flusher;
+    static std::shared_ptr<DftPersistentLog> log;
+
+private:
+    static std::mutex init_mutex_;
+    static bool initialized_;
+
+    static void do_init(const Options& opt);
+};
 
 } // namespace fineline
 
-#endif
+/*
+ * Template instance definitions
+ */
+#include "threadlocal.cpp"
+#include "legacy/lsn.cpp"
+#include "legacy/carray.cpp"
+#include "legacy/log_file.cpp"
+#include "legacy/log_storage.cpp"
 
+#endif

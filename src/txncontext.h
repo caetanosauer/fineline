@@ -23,19 +23,24 @@
 #define FINELINE_TXNCONTEXT_H
 
 #include <stdexcept>
+#include <memory>
+
+#include "threadlocal.h"
 
 namespace fineline {
 
-template <class Plog>
-class BaseTxnContext
+template <class Plog, class SysEnv>
+class TxnContext
 {
 public:
+    using LogPage = typename Plog::LogPageType;
+    using EpochNumber = typename SysEnv::EpochNumber;
 
-    BaseTxnContext(bool auto_commit = true)
+    TxnContext(bool auto_commit = false)
         : auto_commit_(auto_commit), active_(true)
     {}
 
-    ~BaseTxnContext()
+    ~TxnContext()
     {
         if (active_) {
             if (auto_commit_) { commit(); }
@@ -43,9 +48,17 @@ public:
         }
     }
 
-    void commit()
+    bool commit()
     {
-        // TODO
+        // Step 1) Insert log pages into commit buffer
+        EpochNumber epoch {0};
+        plog_.insert_into_buffer(SysEnv::commit_buffer.get(), epoch);
+
+        // Step 2) Wait for given epoch to be hardened on persistent log
+        // TODO this whill hang forever for now, because we don't have a flush daemon running
+        bool success = SysEnv::log_flusher->wait_until_hardened(epoch);
+        if (!success) { abort(); }
+        return success;
     }
 
     void abort()
@@ -75,34 +88,6 @@ protected:
     bool active_;
 
     Plog plog_;
-};
-
-template <class Base>
-class ThreadLocalTxnContext : public Base
-{
-public:
-    template <class... T>
-    ThreadLocalTxnContext(T... args) : Base(args...)
-    {
-        if (current) {
-            throw std::runtime_error("Thread context already exists");
-        }
-        current = this;
-    }
-
-    ~ThreadLocalTxnContext()
-    {
-        current = nullptr;
-    }
-
-    static ThreadLocalTxnContext* get()
-    {
-        // TODO check for nullptr?
-        return current;
-    }
-
-protected:
-    thread_local static ThreadLocalTxnContext* current;
 };
 
 } // namespace fineline

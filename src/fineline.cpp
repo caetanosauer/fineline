@@ -19,13 +19,30 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "txncontext.h"
-
 #include "fineline.h"
+#include "options.h"
 
 namespace fineline {
 
-// Each template instance must be defined for external linkage to work!
-template<> thread_local DftTxnContext* DftTxnContext::current = nullptr;
-
+void init(const Options& options)
+{
+    SysEnv::initialize(options);
 }
+
+void SysEnv::do_init(const Options&)
+{
+    log_buffer = std::make_shared<DftLogBuffer>();
+    // TODO init SQLite lot with options
+    log = std::make_shared<DftPersistentLog>();
+    commit_buffer = std::make_shared<DftCommitBuffer>(log_buffer);
+    log_flusher = std::make_shared<DftLogFlusher>(log_buffer, log);
+}
+
+std::shared_ptr<DftLogBuffer> SysEnv::log_buffer;
+std::shared_ptr<DftCommitBuffer> SysEnv::commit_buffer;
+std::shared_ptr<DftLogFlusher> SysEnv::log_flusher;
+std::shared_ptr<DftPersistentLog> SysEnv::log;
+std::mutex SysEnv::init_mutex_;
+bool SysEnv::initialized_ = false;
+
+}; // namespace fineline
