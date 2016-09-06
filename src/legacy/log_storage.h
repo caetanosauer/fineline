@@ -84,10 +84,6 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 #include <mutex>
 #include <condition_variable>
 
-#define BOOST_FILESYSTEM_NO_DEPRECATED
-#include <boost/filesystem.hpp>
-namespace fs = boost::filesystem;
-
 #include "log_file.h"
 #include "latch_mutex.h"
 
@@ -109,16 +105,13 @@ public:
     using FileMap = std::map<FileNumber, std::shared_ptr<LogFile>>;
     using CurrentFileMap = std::map<FileHighNumber, std::shared_ptr<LogFile>>;
 
-    log_storage(std::string logdir, bool reformat, bool file_size, unsigned max_files,
+    log_storage(std::string logdir, bool reformat, unsigned file_size, unsigned max_files,
         bool delete_old_files);
     virtual ~log_storage();
 
     std::shared_ptr<LogFile> get_file_for_flush(FileHighNumber);
     std::shared_ptr<LogFile> curr_file(FileHighNumber) const;
     std::shared_ptr<LogFile> get_file(FileNumber n) const;
-
-    string make_log_name(FileNumber fnum) const;
-    fs::path make_log_path(FileNumber fnum) const;
 
     void wakeup_recycler();
     unsigned delete_old_files();
@@ -146,9 +139,9 @@ private:
     void try_delete();
 
     // Latch to protect access to partition map
-    foster::MutexLatch _file_map_latch;
+    mutable foster::MutexLatch _file_map_latch;
 
-    std::unique_ptr<file_recycler_t<log_storage<PageSize>>> _recycler_thread;
+    file_recycler_t<log_storage<PageSize>> _recycler;
 
 public:
     static const string log_prefix;

@@ -92,13 +92,14 @@ namespace legacy {
 using foster::assert;
 
 template<size_t PageSize>
-log_file<PageSize>::log_file(std::shared_ptr<log_storage<PageSize>> owner, FileNumber num)
-    : _num(num), _owner(owner), _size(-1),
+log_file<PageSize>::log_file(fs::path path, FileNumber num)
+    : _logpath(path), _num(num), _size(-1),
       _fhdl_rd(invalid_fhdl), _fhdl_app(invalid_fhdl)
 {
 }
 
-void check_error(int res)
+template<size_t PageSize>
+void log_file<PageSize>::check_error(int res)
 {
     if (res != 0) {
         auto what = "I/O error! errno = " + std::to_string(errno);
@@ -114,7 +115,7 @@ void log_file<PageSize>::open_for_append()
     assert<1>(!is_open_for_append());
 
     int fd, flags = O_RDWR | O_CREAT;
-    string fname = _owner->make_log_name(_num);
+    string fname = make_log_name();
     fd = ::open(fname.c_str(), flags);
     if (fd < 0) { throw std::runtime_error("Error opening log file"); }
     _fhdl_app = fd;
@@ -126,7 +127,7 @@ void log_file<PageSize>::open_for_read()
     std::unique_lock<std::mutex> lck(_mutex);
 
     if(_fhdl_rd == invalid_fhdl) {
-        string fname = _owner->make_log_name(_num);
+        string fname = make_log_name();
         int flags = O_RDONLY;
         int fd = ::open(fname.c_str(), flags, 0);
         if (fd < 0) { throw std::runtime_error("Error opening log file"); }
@@ -217,7 +218,7 @@ void log_file<PageSize>::destroy()
     close_for_read();
     close_for_append();
 
-    fs::path f = _owner->make_log_name(_num);
+    fs::path f = make_log_path();
     fs::remove(f);
 }
 

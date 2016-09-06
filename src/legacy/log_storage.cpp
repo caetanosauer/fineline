@@ -51,28 +51,39 @@ class file_recycler_t
 public:
     file_recycler_t(std::shared_ptr<LogStorage> storage)
         : storage(storage), retire(false)
-    {}
+    {
+    }
+
+    ~file_recycler_t()
+    {
+        retire = true;
+        if (_thread.get()) { _thread->join(); }
+    }
 
     void run()
     {
         while (!retire) {
-            std::unique_lock<std::mutex> lck(_recycler_mutex);
-            _recycler_condvar.wait(lck);
-            if (retire) { break; }
+            std::unique_lock<std::mutex> lck(_mutex);
+            _cond.wait(lck);
+            if (retire.load()) { break; }
             storage->delete_old_files();
         }
     }
 
     void wakeup()
     {
-        std::unique_lock<std::mutex> lck(_recycler_mutex);
-        _recycler_condvar.notify_one();
+        std::unique_lock<std::mutex> lck(_mutex);
+        if (!_thread.get()) {
+            _thread.reset(new std::thread {&file_recycler_t::run, this});
+        }
+        _cond.notify_one();
     }
 
     std::shared_ptr<LogStorage> storage;
     std::atomic<bool> retire;
-    std::condition_variable _recycler_condvar;
-    std::mutex _recycler_mutex;
+    std::condition_variable _cond;
+    std::mutex _mutex;
+    std::unique_ptr<std::thread> _thread;
 };
 
 /*
@@ -82,8 +93,9 @@ public:
  * from the various prime methods of the old log_core.
  */
 template <size_t P>
-log_storage<P>::log_storage(std::string logdir, bool reformat, bool file_size, unsigned max_files,
+log_storage<P>::log_storage(std::string logdir, bool reformat, unsigned file_size, unsigned max_files,
         bool delete_old_files)
+    : _recycler(std::shared_ptr<log_storage<P>>(this))
 {
     if (logdir.empty()) {
         throw std::runtime_error("ERROR: logdir must be set to enable logging.");
@@ -125,12 +137,11 @@ log_storage<P>::log_storage(std::string logdir, bool reformat, bool file_size, u
             FileNumber fnum;
             ss >> fnum;
 
-            _files[fnum] = std::make_shared<LogFile>(this, fnum);
-            if (last_files.find(fnum.hi()) == last_files.end()) {
+            _files[fnum] = std::make_shared<LogFile>(_logpath, fnum);
+            if (last_files.find(fnum.hi()) == last_files.end()
+                    || fnum >= last_files[fnum.hi()])
+            {
                 last_files[fnum.hi()] = fnum.lo();
-            }
-            else if (fnum >= last_files[fnum.hi()]) {
-                last_files[fnum.hi()] = fnum;
             }
         }
         else {
@@ -145,7 +156,7 @@ log_storage<P>::log_storage(std::string logdir, bool reformat, bool file_size, u
         if (!p) {
             create_file(fnum);
             p = get_file(fnum);
-            assert<0>(p);
+            assert<0>(p.get());
         }
         p->open_for_append();
         _current[elem.first] = p;
@@ -155,17 +166,10 @@ log_storage<P>::log_storage(std::string logdir, bool reformat, bool file_size, u
 template <size_t P>
 log_storage<P>::~log_storage()
 {
-    if (_recycler_thread) {
-        _recycler_thread->retire = true;
-        _recycler_thread->wakeup();
-        _recycler_thread->join();
-        _recycler_thread = nullptr;
-    }
-
     ExclusiveLatchContext cs(&_file_map_latch);
 
     for (auto elem : _files) {
-        auto p = elem->second;
+        auto p = elem.second;
         p->close_for_read();
         p->close_for_append();
     }
@@ -200,11 +204,11 @@ std::shared_ptr<log_file<P>> log_storage<P>::create_file(FileNumber fnum)
 {
     auto p = get_file(fnum);
     if (p) {
-        auto what = "Partition " + fnum.so_string() << " already exists";
+        auto what = "Partition " + fnum.str() + " already exists";
         throw std::runtime_error(what);
     }
 
-    p = std::make_shared<LogFile>(this, fnum);
+    p = std::make_shared<LogFile>(_logpath, fnum);
     p->set_size(0);
 
     {
@@ -230,18 +234,14 @@ template <size_t P>
 void log_storage<P>::wakeup_recycler()
 {
     if (!_delete_old_files) { return; }
-
-    if (!_recycler_thread) {
-        _recycler_thread.reset(new file_recycler_t<log_storage<P>>(this));
-        _recycler_thread->fork();
-    }
-    _recycler_thread->wakeup();
+    _recycler.wakeup();
 }
 
 template <size_t P>
 unsigned log_storage<P>::delete_old_files()
 {
     if (!_delete_old_files) { return 0; }
+    return 0;
     // TODO implement!
 
     // if (older_than == 0 && smlevel_0::chkpt) {
@@ -299,18 +299,6 @@ template <size_t P>
 string log_storage<P>::get_sqlite_db_path() const
 {
     return (_logpath / fs::path(sqlite_db_name)).string();
-}
-
-template <size_t P>
-string log_storage<P>::make_log_name(FileNumber fnum) const
-{
-    return make_log_path(fnum).string();
-}
-
-template <size_t P>
-fs::path log_storage<P>::make_log_path(FileNumber fnum) const
-{
-    return _logpath / fs::path(log_prefix + fnum.str());
 }
 
 template <size_t P>

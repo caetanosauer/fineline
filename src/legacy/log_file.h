@@ -83,6 +83,10 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 #include <atomic>
 #include <mutex>
 
+#define BOOST_FILESYSTEM_NO_DEPRECATED
+#include <boost/filesystem.hpp>
+namespace fs = boost::filesystem;
+
 #include "lsn.h"
 
 namespace fineline {
@@ -107,7 +111,7 @@ public:
 
     static constexpr int invalid_fhdl = -1;
 
-    log_file(std::shared_ptr<log_storage<PageSize>>, FileNumber);
+    log_file(fs::path logpath, FileNumber);
     virtual ~log_file() { }
 
     void open_for_append();
@@ -132,9 +136,22 @@ public:
 
     void set_size(size_t s) { _size = s; }
 
+    std::string make_log_name() const
+    {
+        return make_log_path().string();
+    }
+
+    fs::path make_log_path() const
+    {
+        return _logpath / fs::path(log_storage<PageSize>::log_prefix + _num.str());
+    }
+
 private:
+    void check_error(int);
+
+private:
+    fs::path _logpath;
     FileNumber _num;
-    std::shared_ptr<log_storage<PageSize>> _owner;
     std::atomic<size_t> _size;
     int _fhdl_rd;
     int _fhdl_app;
