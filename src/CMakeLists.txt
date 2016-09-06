@@ -1,9 +1,11 @@
 INCLUDE_DIRECTORIES (
   ${CMAKE_SOURCE_DIR}/src
   ${CMAKE_SOURCE_DIR}/foster-btree/src
+  ${Boost_INCLUDE_DIRS}
 )
 
 set(fineline_SRCS
+    ${CMAKE_CURRENT_SOURCE_DIR}/options.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/txncontext.cpp
 )
 

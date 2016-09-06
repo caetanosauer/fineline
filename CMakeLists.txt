@@ -80,7 +80,7 @@ add_subdirectory(test EXCLUDE_FROM_ALL)
 add_subdirectory(foster-btree/third-party/googletest EXCLUDE_FROM_ALL)
 # add_subdirectory(bench EXCLUDE_FROM_ALL)
 
-find_package(Boost COMPONENTS regex system filesystem REQUIRED)
+find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
 
 # add a target to generate API documentation with Doxygen
 find_package(Doxygen)
