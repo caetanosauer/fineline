@@ -92,31 +92,34 @@ public:
  * from the various prime methods of the old log_core.
  */
 template <size_t P>
-log_storage<P>::log_storage(std::string logdir, bool reformat, unsigned file_size, unsigned max_files,
-        bool delete_old_files)
+log_storage<P>::log_storage(const Options& options)
     : _recycler(this)
 {
-    if (logdir.empty()) {
-        throw std::runtime_error("ERROR: logdir must be set to enable logging.");
+    string logpath = options.get<string>("logpath");
+    if (logpath.empty()) {
+        throw std::runtime_error("ERROR: logpath must be set to enable logging.");
     }
-    _logpath = logdir;
+    _logpath = logpath;
+    _index_file_name = options.get<string>("log_index_path");
 
+    bool reformat = options.get<bool>("format");
     if (!fs::exists(_logpath)) {
         if (reformat) {
             fs::create_directories(_logpath);
         } else {
-            auto what = "Error: could not open the log directory " + logdir;
+            auto what = "Error: could not open the log directory " + logpath;
             throw std::runtime_error(what);
         }
     }
 
+    _file_size = options.get<unsigned>("log_file_size");
     // option given in MB -> convert to B
-    file_size = file_size * 1024 * 1024;
+    _file_size *= 1024 * 1024;
     // round to next multiple of the page size
-    file_size = (file_size / P) * P;
-    _file_size = file_size;
-    _max_files = max_files;
-    _delete_old_files = delete_old_files;
+    _file_size = (_file_size / P) * P;
+
+    _max_files = options.get<unsigned>("log_max_files");
+    _delete_old_files = options.get<bool>("log_recycle");
 
     std::map<FileHighNumber, FileLowNumber> last_files;
     fs::directory_iterator it(_logpath), eod;
@@ -143,8 +146,8 @@ log_storage<P>::log_storage(std::string logdir, bool reformat, unsigned file_siz
                 last_files[fnum.hi()] = fnum.lo();
             }
         }
-        else if (fname == sqlite_db_name) {
-            // TODO
+        else if (fname == _index_file_name) {
+            // ignore
         }
         else {
             auto what = "log_storage: cannot parse filename " + fname;
@@ -299,12 +302,6 @@ std::shared_ptr<log_file<P>> log_storage<P>::curr_file(FileHighNumber level) con
     auto it = _current.find(level);
     if (it == _current.end()) { return nullptr; }
     return it->second;
-}
-
-template <size_t P>
-string log_storage<P>::get_sqlite_db_path() const
-{
-    return (_logpath / fs::path(sqlite_db_name)).string();
 }
 
 template <size_t P>

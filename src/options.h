@@ -19,9 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef FINELINE_SYSOPT_H
-#define FINELINE_SYSOPT_H
+#ifndef FINELINE_OPTIONS_H
+#define FINELINE_OPTIONS_H
 
+#include <map>
 #include <boost/program_options.hpp>
 namespace popt = boost::program_options;
 
@@ -36,24 +37,22 @@ public:
     static popt::options_description& get_description();
 
     template <class T>
-    void get(std::string name, T& opt)
+    void get(std::string name, T& opt) const
     {
         opt = map_[name].as<T>();
     }
 
-    std::string get_string(std::string name)
+    template <class T>
+    T get(std::string name) const
     {
-        return map_[name].as<std::string>();
+         return map_[name].as<T>();
     }
 
-    unsigned long get_unsigned(std::string name)
+    template <class T>
+    void set(std::string name, T value)
     {
-        return map_[name].as<unsigned long>();
-    }
-
-    long get_int(std::string name)
-    {
-        return map_[name].as<long>();
+        std::map<std::string, popt::variable_value>& std_map = map_;
+        std_map[name].value() = boost::any(value);
     }
 
 protected:

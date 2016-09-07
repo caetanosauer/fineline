@@ -29,11 +29,11 @@ void init(const Options& options)
     SysEnv::initialize(options);
 }
 
-void SysEnv::do_init(const Options&)
+void SysEnv::do_init(const Options& options)
 {
     log_buffer = std::make_shared<DftLogBuffer>();
     // TODO init SQLite lot with options
-    log = std::make_shared<DftPersistentLog>();
+    log = std::make_shared<DftPersistentLog>(options);
     commit_buffer = std::make_shared<DftCommitBuffer>(log_buffer);
     log_flusher = std::make_shared<DftLogFlusher>(log_buffer, log);
 }

@@ -19,47 +19,59 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef FINELINE_TEST_FIXTURE_TEMPFILE_H
-#define FINELINE_TEST_FIXTURE_TEMPFILE_H
+#ifndef FINELINE_LEGACY_LOG_INDEX_SQLITE_H
+#define FINELINE_LEGACY_LOG_INDEX_SQLITE_H
 
-#include <gtest/gtest.h>
+#include <memory>
 
-#define BOOST_FILESYSTEM_NO_DEPRECATED
-#include <boost/filesystem.hpp>
-namespace fs = boost::filesystem;
+#include "assertions.h"
+#include "log_storage.h"
+
+struct sqlite3;
+struct sqlite3_stmt;
 
 namespace fineline {
-namespace test {
 
-class TmpDirFixture : public ::testing::Test {
+class Options;
+
+namespace legacy {
+
+using foster::assert;
+
+class SQLiteLogIndex
+{
 public:
-    std::string get_full_path(std::string fname)
-    {
-        return (tmpdir_ / fname).string();
-    }
 
-    std::string get_temp_dir()
-    {
-        return tmpdir_.string();
-    }
+    SQLiteLogIndex(const Options& path);
+
+    ~SQLiteLogIndex();
+
+    void insert_block(
+            uint32_t file,
+            uint32_t block,
+            uint64_t partition,
+            uint64_t min,
+            uint64_t max
+    );
+
+    // Used for tests
+    sqlite3* get_db() { return db_; }
 
 protected:
-    virtual void SetUp()
-    {
-        tmpdir_ = fs::temp_directory_path() / fs::unique_path();
-        fs::create_directory(tmpdir_);
-    }
 
-    virtual void TearDown()
-    {
-        fs::remove_all(tmpdir_);
-    }
+    void sql_check(int rc, int expected = 0);
+    void connect();
+    void disconnect();
+    void init();
+    void finalize();
 
 private:
-    fs::path tmpdir_;
+    sqlite3* db_;
+    sqlite3_stmt* insert_stmt_;
+    std::string db_path_;
 };
 
-} // namespace test
+} // namespace legacy
 } // namespace fineline
 
 #endif

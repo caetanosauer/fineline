@@ -43,6 +43,10 @@ void Options::init_description(popt::options_description& opt)
          "Maximum size of a log file (in MB)")
         ("log_max_files", popt::value<unsigned>()->default_value(0),
          "Maximum number of log files to maintain (0 = unlimited)")
+        ("log_index_path", popt::value<string>()->default_value("index.db"),
+         "Path to log index file")
+        ("log_index_path_relative", popt::value<bool>()->default_value(true),
+         "Whether log index path is relative to logpath or absolute")
     ;
 }
 

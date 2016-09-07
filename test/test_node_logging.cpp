@@ -159,7 +159,11 @@ TEST(TestRedo, SimpleInsertionRedo)
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
-    fineline::init();
+    // TODO these tests should use a mock of log_fs
+    // right now, they leave log folder behind
+    fineline::Options options;
+    options.set("format", true);
+    fineline::init(options);
     return RUN_ALL_TESTS();
 }
 

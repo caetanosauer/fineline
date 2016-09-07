@@ -25,8 +25,9 @@
 #include <cstring>
 #include <sqlite3.h>
 
+#include "options.h"
 #include "fixture_tempfile.h"
-#include "legacy/log_sqlite.h"
+#include "legacy/log_index_sqlite.h"
 
 class TestSQLite : public fineline::test::TmpDirFixture
 {
@@ -36,7 +37,11 @@ protected:
     virtual void SetUp()
     {
         fineline::test::TmpDirFixture::SetUp();
-        log_ = new fineline::legacy::SQLiteIndexedLog {get_full_path(DBFile)};
+        fineline::Options options;
+        options.set("logpath", get_temp_dir());
+        options.set("log_index_path", string{DBFile});
+        options.set("log_index_path_relative", true);
+        log_ = new fineline::legacy::SQLiteLogIndex {options};
     }
 
     virtual void TearDown()
@@ -45,7 +50,7 @@ protected:
         fineline::test::TmpDirFixture::TearDown();
     }
 
-    fineline::legacy::SQLiteIndexedLog* log_;
+    fineline::legacy::SQLiteLogIndex* log_;
 };
 
 constexpr char TestSQLite::DBFile[];

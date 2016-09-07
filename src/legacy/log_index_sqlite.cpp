@@ -22,14 +22,18 @@
 #include <sqlite3.h>
 #include <stdexcept>
 
-#include "log_sqlite.h"
+#include "log_index_sqlite.h"
+
+#define BOOST_FILESYSTEM_NO_DEPRECATED
+#include <boost/filesystem.hpp>
+namespace fs = boost::filesystem;
 
 namespace fineline {
 namespace legacy {
 
 using foster::assert;
 
-const char* SQLiteIndexedLogDDL =
+const auto CreateTablesQuery =
     "create table if not exists logblocks ("
     "   file_number int,"
     "   block_number int,"
@@ -43,22 +47,27 @@ const char* SQLiteIndexedLogDDL =
     "   min_key, max_key desc);"
 ;
 
-const char* SQLiteQueryInsertBlock =
+const auto InsertBlockQuery =
     "insert into logblocks values (?,?,?,?,?,NULL)";
 
-SQLiteIndexedLog::SQLiteIndexedLog(const std::string& path)
-    : db_(nullptr), db_path_(path)
+SQLiteLogIndex::SQLiteLogIndex(const Options& options)
+    : db_(nullptr)
 {
+    db_path_ = options.get<string>("log_index_path");
+    if (options.get<bool>("log_index_path_relative")) {
+        auto path = fs::path{options.get<string>("logpath")} / db_path_;
+        db_path_ = path.string();
+    }
     connect();
     init();
 }
 
-SQLiteIndexedLog::~SQLiteIndexedLog()
+SQLiteLogIndex::~SQLiteLogIndex()
 {
     disconnect();
 }
 
-void SQLiteIndexedLog::sql_check(int rc, int expected)
+void SQLiteLogIndex::sql_check(int rc, int expected)
 {
     if (rc != expected) {
         disconnect();
@@ -66,30 +75,32 @@ void SQLiteIndexedLog::sql_check(int rc, int expected)
     }
 }
 
-void SQLiteIndexedLog::connect()
+void SQLiteLogIndex::connect()
 {
     if (!db_) {
         sql_check(sqlite3_open(db_path_.c_str(), &db_));
     }
 }
 
-void SQLiteIndexedLog::disconnect()
+void SQLiteLogIndex::disconnect()
 {
-    sqlite3_close(db_);
+    if (db_) {
+        sqlite3_close(db_);
+    }
 }
 
-void SQLiteIndexedLog::init()
+void SQLiteLogIndex::init()
 {
-    sql_check(sqlite3_exec(db_, SQLiteIndexedLogDDL, 0, 0, 0));
-    sql_check(sqlite3_prepare_v2(db_, SQLiteQueryInsertBlock, -1, &insert_stmt_, 0));
+    sql_check(sqlite3_exec(db_, CreateTablesQuery, 0, 0, 0));
+    sql_check(sqlite3_prepare_v2(db_, InsertBlockQuery, -1, &insert_stmt_, 0));
 }
 
-void SQLiteIndexedLog::finalize()
+void SQLiteLogIndex::finalize()
 {
     sqlite3_finalize(insert_stmt_);
 }
 
-void SQLiteIndexedLog::insert_block(uint32_t file, uint32_t block, uint64_t partition,
+void SQLiteLogIndex::insert_block(uint32_t file, uint32_t block, uint64_t partition,
         uint64_t min, uint64_t max)
 {
     sql_check(sqlite3_reset(insert_stmt_));

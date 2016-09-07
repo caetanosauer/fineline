@@ -33,7 +33,9 @@
 #include "logflusher.h"
 #include "latch_mutex.h"
 #include "legacy/carray.h"
-#include "legacy/log_sqlite.h"
+#include "legacy/log_index_sqlite.h"
+#include "legacy/log_storage.h"
+#include "log_fs.h"
 
 namespace fineline {
 
@@ -62,8 +64,8 @@ using DftLogBuffer = AsyncRingBuffer<ExtLogPage, LogBufferSize>;
 using DftCommitBuffer = AetherInsertBuffer<ExtLogPage, foster::MutexLatch,
       DftLogBufferTemp, legacy::ConsolidationArray>;
 template <class P>
-using DftPersistentLogTemp = legacy::SQLiteLogAdapter<P>;
-using DftPersistentLog = legacy::SQLiteLogAdapter<ExtLogPage>;
+using DftPersistentLogTemp = FileBasedLog<P, legacy::SQLiteLogIndex, legacy::log_storage>;
+using DftPersistentLog = DftPersistentLogTemp<ExtLogPage>;
 using DftLogFlusher = LogFlusher<ExtLogPage, DftLogBufferTemp, DftPersistentLogTemp>;
 
 using DftTxnContext = ThreadLocalScope<TxnContext<DftPlog, SysEnv>>;

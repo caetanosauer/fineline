@@ -84,6 +84,7 @@ Rome Research Laboratory Contract No. F30602-97-2-0247.
 #include <mutex>
 #include <condition_variable>
 
+#include "options.h"
 #include "log_file.h"
 #include "latch_mutex.h"
 
@@ -93,8 +94,8 @@ namespace legacy {
 template <class> class file_recycler_t;
 
 template <size_t PageSize>
-class log_storage {
-
+class log_storage
+{
     friend class file_recycler_t<log_storage<PageSize>>;
 
 public:
@@ -105,48 +106,41 @@ public:
     using FileMap = std::map<FileNumber, std::shared_ptr<LogFile>>;
     using CurrentFileMap = std::map<FileHighNumber, std::shared_ptr<LogFile>>;
 
-    log_storage(std::string logdir, bool reformat, unsigned file_size, unsigned max_files,
-        bool delete_old_files);
+    log_storage(const Options&);
     virtual ~log_storage();
 
     std::shared_ptr<LogFile> get_file_for_flush(FileHighNumber);
     std::shared_ptr<LogFile> curr_file(FileHighNumber) const;
     std::shared_ptr<LogFile> get_file(FileNumber n) const;
-
-    void wakeup_recycler();
-    unsigned delete_old_files();
-
     size_t get_file_size() const { return _file_size; }
 
-    string get_sqlite_db_path() const;
-
-private:
+protected:
+    void wakeup_recycler();
+    unsigned delete_old_files();
+    void try_delete();
     std::shared_ptr<LogFile> create_file(FileNumber pnum);
 
+private:
     fs::path _logpath;
     size_t _file_size;
+    unsigned _max_files;
+    bool _delete_old_files;
+    string _index_file_name;
 
     FileMap _files;
     CurrentFileMap _current;
+    file_recycler_t<log_storage<PageSize>> _recycler;
 
-    unsigned _max_files;
-    bool _delete_old_files;
+    // Latch to protect access to partition map
+    mutable foster::MutexLatch _file_map_latch;
 
     // forbid copy
     log_storage<PageSize>(const log_storage<PageSize>&);
     log_storage<PageSize>& operator=(const log_storage<PageSize>&);
 
-    void try_delete();
-
-    // Latch to protect access to partition map
-    mutable foster::MutexLatch _file_map_latch;
-
-    file_recycler_t<log_storage<PageSize>> _recycler;
-
 public:
     static constexpr auto log_prefix = "log.";
     static constexpr auto log_regex = "log\\.[0-9][0-9]*\\.[1-9][0-9]*";
-    static constexpr auto sqlite_db_name = "index.db";
 };
 
 } // namespace legacy
