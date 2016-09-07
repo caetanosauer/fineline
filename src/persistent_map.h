@@ -19,78 +19,66 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef FINELINE_LOGREC_H
-#define FINELINE_LOGREC_H
-
-#include <memory>
-
-#include "lrtype.h"
-#include "logpage.h"
+#ifndef FINELINE_PERSISTENT_MAP_H
+#define FINELINE_PERSISTENT_MAP_H
 
 namespace fineline {
+namespace map {
 
-template <class Node>
-struct Logrec
+template <
+    class Map,
+    class Logger
+>
+void insert(Map& map, Logger& logger,
+        const typename Map::key_type& key,
+        const typename Map::mapped_type& value)
 {
-    Logrec(Node& node) : node(&node)
-    {
-    }
+    map.insert(std::make_pair(key, value));
+    logger.log(LRType::Insert, key, value);
+}
 
-    virtual void redo() = 0;
-    virtual void print(std::ostream&) const = 0;
-
-    friend std::ostream& operator<< (std::ostream& out, const Logrec<Node>& n)
-    {
-        n.print(out);
-        return out;
-    }
-
-    Node* node;
-};
-
-template <class Node>
-struct LogrecInsert : public Logrec<Node>
+template <
+    class Map,
+    class LogrecHeader
+>
+void redo(Map& map, const LogrecHeader& hdr, char* payload)
 {
-    using Key = typename Node::KeyType;
-    using Value = typename Node::ValueType;
+    using K = typename Map::key_type;
+    using V = typename Map::mapped_type;
 
-    LogrecInsert(Node& node, char* payload)
-        : Logrec<Node>(node)
-    {
-        LogEncoder<Key, Value>::decode(payload, &key, &value);
-    }
+    K key;
+    V value;
+    LogEncoder<K, V>::decode(payload, &key, &value);
 
-    void redo()
-    {
-        this->node->insert(key, value, false);
-    }
-
-    void print(std::ostream& out) const
-    {
-        out << "insert k=" << key << " v=" << value;
-    }
-
-    Key key;
-    Value value;
-};
-
-
-template <class Node>
-std::unique_ptr<Logrec<Node>>
-ConstructLogRec(LRType type, Node& node, char* payload)
-{
-    Logrec<Node>* res = nullptr;
-    switch (type) {
-        case LRType::Insert: res = new LogrecInsert<Node>(node, payload); break;
+    switch (hdr.type) {
+        case LRType::Insert:
+            map.insert(std::make_pair(key, value));
+            break;
         default:
             auto what = "I don't know how to redo this log record";
             throw std::runtime_error(what);
     }
-
-    return std::unique_ptr<Logrec<Node>>{res};
 }
 
+template <
+    class Map,
+    class Logger
+>
+void recover(Map& map, Logger&, typename Logger::IdType id)
+{
+    // TODO: This is where it gets interesting!
+    auto log = Logger::SysEnv::log;
+    auto iter = log->fetch(id);
 
+    typename Logger::LogrecHeader hdr;
+    char* payload;
+
+    while (iter->next(hdr, payload)) {
+        redo(map, hdr, payload);
+    }
+}
+
+} // namespace fineline
 } // namespace fineline
 
 #endif

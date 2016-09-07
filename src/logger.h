@@ -35,10 +35,12 @@ namespace fineline {
 
 using foster::LRType;
 
-template <class TxnContext, class LogrecHeader>
+template <class TxnContext, class LRHeader>
 class TxnLogger
 {
 public:
+    using LogrecHeader = LRHeader;
+    using SysEnv = typename TxnContext::SysEnv;
     using IdType = typename LogrecHeader::IdType;
     using SeqNumType = typename LogrecHeader::SeqNumType;
 

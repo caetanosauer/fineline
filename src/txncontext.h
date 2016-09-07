@@ -29,10 +29,11 @@
 
 namespace fineline {
 
-template <class Plog, class SysEnv>
+template <class Plog, class Env>
 class TxnContext
 {
 public:
+    using SysEnv = Env;
     using LogPage = typename Plog::LogPageType;
     using EpochNumber = typename SysEnv::EpochNumber;
 
