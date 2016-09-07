@@ -54,12 +54,27 @@ public:
             uint64_t max
     );
 
+    class FetchBlockIterator
+    {
+    public:
+        FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key);
+        ~FetchBlockIterator();
+        bool next(uint64_t& partition, uint32_t& file, uint32_t& block);
+    private:
+        SQLiteLogIndex* owner_;
+        sqlite3_stmt* stmt_;
+        bool done_;
+    };
+
+    std::shared_ptr<FetchBlockIterator> fetch_blocks(uint64_t key);
+
     // Used for tests
     sqlite3* get_db() { return db_; }
 
 protected:
 
     void sql_check(int rc, int expected = 0);
+
     void connect();
     void disconnect();
     void init();

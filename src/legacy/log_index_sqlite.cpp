@@ -50,6 +50,13 @@ const auto CreateTablesQuery =
 const auto InsertBlockQuery =
     "insert into logblocks values (?,?,?,?,?,NULL)";
 
+const auto FetchHistoryQuery =
+    "select part_number, file_number, block_number "
+    "from logblocks "
+    "where ? >= min_key and ? <= max_key "
+    "order by part_number desc, file_number desc, block_number desc"
+;
+
 SQLiteLogIndex::SQLiteLogIndex(const Options& options)
     : db_(nullptr)
 {
@@ -116,6 +123,49 @@ void SQLiteLogIndex::insert_block(uint32_t file, uint32_t block, uint64_t partit
         rc = sqlite3_step(insert_stmt_);
     }
     sql_check(rc, SQLITE_DONE);
+}
+
+std::shared_ptr<SQLiteLogIndex::FetchBlockIterator> SQLiteLogIndex::fetch_blocks(uint64_t key)
+{
+    return std::make_shared<SQLiteLogIndex::FetchBlockIterator>(this, key);
+}
+
+SQLiteLogIndex::FetchBlockIterator::FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key)
+{
+    owner_ = owner;
+    done_ = false;
+    owner_->sql_check(sqlite3_prepare_v2(owner_->db_, FetchHistoryQuery, -1, &stmt_, 0));
+    owner_->sql_check(sqlite3_bind_int(stmt_, 1, key));
+    owner_->sql_check(sqlite3_bind_int(stmt_, 2, key));
+}
+
+SQLiteLogIndex::FetchBlockIterator::~FetchBlockIterator()
+{
+    owner_->sql_check(sqlite3_finalize(stmt_));
+}
+
+bool SQLiteLogIndex::FetchBlockIterator::next(uint64_t& partition, uint32_t& file, uint32_t& block)
+{
+    if (done_) { return false; }
+
+    int rc = SQLITE_BUSY;
+    while (rc == SQLITE_BUSY) {
+        rc = sqlite3_step(stmt_);
+    }
+    if (rc == SQLITE_DONE) {
+        done_ = true;
+        return false;
+    }
+    else if (rc == SQLITE_ROW) {
+        partition = sqlite3_column_int64(stmt_, 1);
+        file = sqlite3_column_int(stmt_, 1);
+        block = sqlite3_column_int(stmt_, 2);
+    }
+    else {
+        owner_->sql_check(rc);
+        return false;
+    }
+    return true;
 }
 
 } // namespace legacy
