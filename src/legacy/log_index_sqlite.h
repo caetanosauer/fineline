@@ -66,7 +66,7 @@ public:
         bool done_;
     };
 
-    std::shared_ptr<FetchBlockIterator> fetch_blocks(uint64_t key);
+    std::unique_ptr<FetchBlockIterator> fetch_blocks(uint64_t key);
 
     // Used for tests
     sqlite3* get_db() { return db_; }

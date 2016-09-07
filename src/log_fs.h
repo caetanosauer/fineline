@@ -43,6 +43,7 @@ public:
     static constexpr size_t PageSize = sizeof(LogPage);
 
     using LogKey = typename LogPage::Key;
+    using ThisType = FileBasedLog<LogPage, LogIndex, LogFileSystem>;
 
     FileBasedLog(const Options& options)
     {
@@ -66,6 +67,57 @@ public:
         // and block_number (32-bit)
         uint64_t partition = (uint64_t(file->num().data()) << 32) & offset;
         index_->insert_block(file->num().data(), offset, partition, min_key.node_id, max_key.node_id);
+    }
+
+    using LogPageIterator = typename LogPage::Iterator;
+    using FetchBlockIterator = typename LogIndex::FetchBlockIterator;
+
+    class LogFileIterator
+    {
+    public:
+        LogFileIterator(ThisType* log, uint64_t key)
+            : log_(log), block_index_iter_ {std::move(log->index_->fetch_blocks(key))}
+        {
+            next_block();
+        }
+
+        bool next(LogKey& key, char*& payload)
+        {
+            if (!page_iter_.get()) { return false; }
+            bool has_more = page_iter_->next(key, payload);
+            if (!has_more) {
+                has_more = next_block();
+                if (!has_more) { return false; }
+                has_more = page_iter_->next(key, payload);
+            }
+            return has_more;
+        }
+
+    protected:
+        bool next_block()
+        {
+            uint64_t partition;
+            uint32_t file;
+            uint32_t block;
+            bool has_more = block_index_iter_->next(partition, file, block);
+            if (!has_more) { return false; }
+
+            log_->fs_->get_file(file)->read(block, &page_);
+            page_iter_ = std::move(page_.iterate(false /* forward */));
+
+            return true;
+        }
+
+    private:
+        ThisType* log_;
+        LogPage page_;
+        std::unique_ptr<LogPageIterator> page_iter_;
+        std::unique_ptr<FetchBlockIterator> block_index_iter_;
+    };
+
+    std::unique_ptr<LogFileIterator> fetch(uint64_t key)
+    {
+        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, key}};
     }
 
 private:

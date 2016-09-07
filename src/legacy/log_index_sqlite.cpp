@@ -125,9 +125,9 @@ void SQLiteLogIndex::insert_block(uint32_t file, uint32_t block, uint64_t partit
     sql_check(rc, SQLITE_DONE);
 }
 
-std::shared_ptr<SQLiteLogIndex::FetchBlockIterator> SQLiteLogIndex::fetch_blocks(uint64_t key)
+std::unique_ptr<SQLiteLogIndex::FetchBlockIterator> SQLiteLogIndex::fetch_blocks(uint64_t key)
 {
-    return std::make_shared<SQLiteLogIndex::FetchBlockIterator>(this, key);
+    return std::unique_ptr<FetchBlockIterator> { new FetchBlockIterator {this, key} };
 }
 
 SQLiteLogIndex::FetchBlockIterator::FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key)

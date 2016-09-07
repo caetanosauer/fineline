@@ -153,30 +153,36 @@ public:
     class Iterator : public AbstractLogIterator<Key>
     {
     public:
-        Iterator(ThisType* lp) :
-            current_slot_{0}, lp_{lp}
-        {}
+        Iterator(ThisType* lp, bool forward = true) :
+            current_slot_{0}, forward_(forward), lp_{lp}
+        {
+            if (!forward && lp) { current_slot_ = lp_->slot_count() - 1; }
+        }
 
         bool next(Key& key, char*& payload)
         {
-            if (!lp_ || current_slot_ >= lp_->slot_count()) { return false; }
+            if (!lp_ || current_slot_ >= lp_->slot_count() || current_slot_ < 0) {
+                return false;
+            }
 
             auto& slot = lp_->get_slot(current_slot_);
             payload = reinterpret_cast<char*>(lp_->get_payload(slot.ptr));
             key = slot.key;
-            current_slot_++;
+            current_slot_ += forward_ ? 1 : -1;
 
             return true;
         }
 
     private:
         SlotNumber current_slot_;
+        bool forward_;
         ThisType* lp_;
     };
 
-    std::unique_ptr<Iterator> iterate()
+    template <class... Args>
+    std::unique_ptr<Iterator> iterate(Args... args)
     {
-        return std::unique_ptr<Iterator>{new Iterator{this}};
+        return std::unique_ptr<Iterator>{new Iterator{this, args...}};
     }
 
 };

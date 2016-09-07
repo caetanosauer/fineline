@@ -138,6 +138,28 @@ public:
         min_index_[min] = std::make_pair(max, block);
     }
 
+    class FetchBlockIterator
+    {
+    public:
+        FetchBlockIterator(StdMapLogIndex* owner, uint64_t key)
+        {
+        }
+
+        bool next(uint64_t& partition, uint32_t& file, uint32_t& block)
+        {
+            // TODO
+            return false;
+        }
+    private:
+        StdMapLogIndex* owner_;
+        bool done_;
+    };
+
+    std::unique_ptr<FetchBlockIterator> fetch_blocks(uint64_t key)
+    {
+        return std::unique_ptr<FetchBlockIterator>{new FetchBlockIterator{this, key}};
+    }
+
 protected:
     std::map<uint64_t, std::pair<uint64_t, uint32_t>> min_index_;
 };
