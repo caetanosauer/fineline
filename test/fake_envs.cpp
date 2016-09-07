@@ -19,29 +19,43 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "fineline.h"
-#include "options.h"
+#include "fake_envs.h"
 
 namespace fineline {
+namespace test {
 
-void init(const Options& options)
-{
-    SysEnv::initialize(options);
-}
+template <
+    class T1,
+    class T2,
+    class T3,
+    class T4
+>
+std::shared_ptr<T2> GenericEnv<T1, T2, T3, T4>::log_buffer;
 
-void SysEnv::do_init(const Options& options)
-{
-    log_buffer = std::make_shared<DftLogBuffer>();
-    log = std::make_shared<DftPersistentLog>(options);
-    commit_buffer = std::make_shared<DftCommitBuffer>(log_buffer);
-    log_flusher = std::make_shared<DftLogFlusher>(log_buffer, log);
-}
+template <
+    class T1,
+    class T2,
+    class T3,
+    class T4
+>
+std::shared_ptr<T1> GenericEnv<T1, T2, T3, T4>::commit_buffer;
 
-std::shared_ptr<DftLogBuffer> SysEnv::log_buffer;
-std::shared_ptr<DftCommitBuffer> SysEnv::commit_buffer;
-std::shared_ptr<DftLogFlusher> SysEnv::log_flusher;
-std::shared_ptr<DftPersistentLog> SysEnv::log;
-std::mutex SysEnv::init_mutex_;
-bool SysEnv::initialized_ = false;
+template <
+    class T1,
+    class T2,
+    class T3,
+    class T4
+>
+std::shared_ptr<T3> GenericEnv<T1, T2, T3, T4>::log_flusher;
 
+template <
+    class T1,
+    class T2,
+    class T3,
+    class T4
+>
+std::shared_ptr<T4> GenericEnv<T1, T2, T3, T4>::log;
+
+}; // namespace test
 }; // namespace fineline
+

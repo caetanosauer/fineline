@@ -19,50 +19,64 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef FINELINE_FINELINE_H
-#define FINELINE_FINELINE_H
+#ifndef FINELINE_TEST_FAKE_ENVS_H
+#define FINELINE_TEST_FAKE_ENVS_H
 
+#include "fake_log_fs.h"
 #include "default_templates.h"
 
 namespace fineline {
+namespace test {
 
-class SysEnv;
+template <class Env>
+void init(const Options& opt = Options{})
+{
+    Env::initialize(opt);
+}
 
-using DftTxnContext = ThreadLocalScope<TxnContext<DftPlog, SysEnv>>;
-using DftLogger = TxnLogger<DftTxnContext, DftLogrecHeader>;
-
-/*
- * Global function that initializes the global static SysEnv members with system components of
- * the default types specified above.
- */
-void init(const Options& = Options{});
-
-class SysEnv
+template <
+    class CommitBuffer,
+    class LogBuffer,
+    class LogFlusher,
+    class PersistentLog
+>
+class GenericEnv
 {
 public:
-    using EpochNumber = typename DftLogFlusher::EpochNumber;
+    using EpochNumber = typename LogFlusher::EpochNumber;
 
-    static void initialize(const Options& opt)
+    static void initialize(const Options& options)
     {
-        std::unique_lock<std::mutex> lck {init_mutex_};
-        if (!initialized_) {
-            do_init(opt);
-            initialized_ = true;
-        }
+        log_buffer = std::make_shared<LogBuffer>();
+        log = std::make_shared<PersistentLog>(options);
+        commit_buffer = std::make_shared<CommitBuffer>(log_buffer);
+        log_flusher = std::make_shared<LogFlusher>(log_buffer, log);
     }
 
-    static std::shared_ptr<DftCommitBuffer> commit_buffer;
-    static std::shared_ptr<DftLogBuffer> log_buffer;
-    static std::shared_ptr<DftLogFlusher> log_flusher;
-    static std::shared_ptr<DftPersistentLog> log;
-
-private:
-    static std::mutex init_mutex_;
-    static bool initialized_;
-
-    static void do_init(const Options& opt);
+    static std::shared_ptr<CommitBuffer> commit_buffer;
+    static std::shared_ptr<LogBuffer> log_buffer;
+    static std::shared_ptr<LogFlusher> log_flusher;
+    static std::shared_ptr<PersistentLog> log;
 };
 
+template <class Env>
+using FakeTxnContext = ThreadLocalScope<TxnContext<DftPlog, Env>>;
+
+template <class Env>
+using FakeLogger = TxnLogger<FakeTxnContext<Env>, DftLogrecHeader>;
+
+template <size_t P>
+using FakeLogFS = LogPageVector<P, 3>;
+
+template <class LogPage>
+using FakePersistentLog = FileBasedLog<LogPage, StdMapLogIndex, FakeLogFS>;
+
+using FakeLogFlusher = LogFlusher<ExtLogPage, DftLogBufferTemp, FakePersistentLog>;
+
+using FakeLogEnv = GenericEnv<DftCommitBuffer, DftLogBuffer, FakeLogFlusher,
+      FakePersistentLog<ExtLogPage>>;
+
+} // namespace test
 } // namespace fineline
 
 /*
@@ -72,7 +86,5 @@ private:
 #include "threadlocal.cpp"
 #include "legacy/lsn.cpp"
 #include "legacy/carray.cpp"
-#include "legacy/log_file.cpp"
-#include "legacy/log_storage.cpp"
 
 #endif

@@ -49,6 +49,14 @@ public:
     }
 
     template <class T>
+    T get(std::string name, T dft) const
+    {
+         auto v = map_[name];
+         if (v.empty()) { return dft; }
+         return v.as<T>();
+    }
+
+    template <class T>
     void set(std::string name, T value)
     {
         std::map<std::string, popt::variable_value>& std_map = map_;

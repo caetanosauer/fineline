@@ -30,7 +30,10 @@
 #include "kv_array.h"
 #include "node.h"
 #include "pointers.h"
-#include "fineline.h"
+
+#include "fake_envs.cpp"
+using TestEnv = fineline::test::FakeLogEnv;
+using TxnContext = fineline::test::FakeTxnContext<TestEnv>;
 
 constexpr size_t DftArrayBytes = 8192;
 constexpr size_t DftAlignment = 8;
@@ -43,7 +46,7 @@ using KVArray = foster::KeyValueArray<K, V,
       SArray<uint16_t>,
       foster::BinarySearch<SArray<uint16_t>>,
       foster::DefaultEncoder<K, V, uint16_t>,
-      fineline::DftLogger
+      fineline::test::FakeLogger<TestEnv>
 >;
 
 template<class K, class V>
@@ -54,7 +57,7 @@ using BTNode = foster::BtreeNode<K, V,
 
 TEST(TestInsertions, SimpleInsertions)
 {
-    fineline::DftTxnContext ctx;
+    TxnContext ctx;
 
     BTNode<string, string> node;
     ASSERT_TRUE(node.is_low_key_infinity());
@@ -76,7 +79,7 @@ TEST(TestInsertions, SimpleInsertions)
 
 TEST(TestSplit, SimpleSplit)
 {
-    fineline::DftTxnContext ctx;
+    TxnContext ctx;
 
     using NodePointer = BTNode<string, string>::NodePointer;
 
@@ -121,7 +124,7 @@ TEST(TestSplit, SimpleSplit)
 
 TEST(TestRedo, SimpleInsertionRedo)
 {
-    fineline::DftTxnContext ctx;
+    TxnContext ctx;
 
     BTNode<string, string> node;
     node.insert("key2", "value2");
@@ -159,11 +162,7 @@ TEST(TestRedo, SimpleInsertionRedo)
 int main(int argc, char **argv)
 {
     ::testing::InitGoogleTest(&argc, argv);
-    // TODO these tests should use a mock of log_fs
-    // right now, they leave log folder behind
-    fineline::Options options;
-    options.set("format", true);
-    fineline::init(options);
+    fineline::test::init<TestEnv>();
     return RUN_ALL_TESTS();
 }
 
