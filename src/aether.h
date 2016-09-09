@@ -22,8 +22,15 @@
 #ifndef FINELINE_AETHER_H
 #define FINELINE_AETHER_H
 
+#include <thread>
+#include <chrono>
+
 #include "assertions.h"
 #include "legacy/carray_slot.h"
+
+// required for ExclusiveLatchContext, even though Latch is a template parameter
+// TODO: implement generic latch guard for read-write latches
+#include "latch_mutex.h"
 
 namespace fineline {
 
@@ -39,6 +46,7 @@ class AetherInsertBuffer
 {
 public:
 
+    using ThisType = AetherInsertBuffer<LogPage, Latch, Buffer, CArray>;
     using SlotNumber = typename LogPage::SlotNumber;
     using PayloadPtr = typename LogPage::PayloadPtr;
     using EpochNumber = typename Buffer<LogPage>::EpochNumber;
@@ -54,9 +62,11 @@ public:
 
     static constexpr unsigned PayloadBits = 32;
     static constexpr unsigned PayloadBlockSize = LogPage::AlignmentSize;
+    // TODO use Options
+    static constexpr unsigned DftTimeout = 10;
 
     AetherInsertBuffer(std::shared_ptr<Buffer<LogPage>> buffer)
-        : buffer_(buffer)
+        : buffer_(buffer), timeout_policy_{new TimeoutRelease{this, DftTimeout}}
     {}
 
     template <class PrivateLogPage>
@@ -65,6 +75,7 @@ public:
         // TODO: this might not be needed if we abstract the copy
         static_assert(LogPage::AlignmentSize == PrivateLogPage::AlignmentSize,
             "Private log page and log page must have the same alignment");
+        assert<3>(plog.slot_count() > 0);
 
         auto first_payload = plog.get_first_payload();
         auto payload_count = plog.get_payload_end() - first_payload;
@@ -78,17 +89,6 @@ public:
         copy_to_target(plog, target, cslot);
         leave_carray(cslot, to_reserve);
 
-        return epoch;
-    }
-
-    EpochNumber force_current_page()
-    {
-        latch_.acquire_write();
-        // Simply request a new page, releasing the current one by decreasing its
-        // shared_ptr ref count. Once it reaches zero, flusher can pick it up.
-        EpochNumber epoch {0};
-        curr_page_ = buffer_->produce(epoch);
-        latch_.release_write();
         return epoch;
     }
 
@@ -145,7 +145,7 @@ protected:
         auto space_needed = get_reservation_bytes(to_reserve);
         if (!curr_page_ || space_needed > curr_page_->free_space()) {
             // release current page and get new one
-            curr_page_ = buffer_->produce(cslot->epoch);
+            cslot->epoch = release_current_epoch();
         }
         assert<1>(curr_page_.get());
         assert<1>(space_needed <= curr_page_->free_space());
@@ -211,11 +211,72 @@ protected:
         }
     }
 
+    // WARNING: caller must hold exclusive latch!
+    EpochNumber release_current_epoch()
+    {
+        assert<1>(!curr_page_ || curr_page_->slot_count() > 0);
+        EpochNumber epoch {0};
+        // Simply request a new page, releasing the current one by decreasing its
+        // shared_ptr ref count. Once it reaches zero, flusher can pick it up.
+        curr_page_ = buffer_->produce(epoch);
+        return epoch;
+    }
+
+    /*
+     * Implementation of a timeout policy for group commit.
+     *
+     * This class spanws a thread that periodically checks if the current page has remained
+     * unmodified since the last check. If yes, than it releases the page so that waiting
+     * transactions can make progress even if no other transactions joined their commit groups
+     * in a long time.
+     * The maximum waiting time of a commit request in milliseconds is 2*timeout_ms
+     */
+    class TimeoutRelease {
+    public:
+        TimeoutRelease(ThisType* owner, unsigned timeout_ms)
+            : owner_(owner), timeout_(timeout_ms), stop_(false)
+        {
+            thread_.reset(new std::thread {&TimeoutRelease::run, this});
+        }
+
+        ~TimeoutRelease()
+        {
+            stop_ = true;
+            thread_->join();
+        }
+
+        void run()
+        {
+            while (!stop_) {
+                auto last = owner_->curr_page_.get();
+                std::this_thread::sleep_for(std::chrono::milliseconds{timeout_});
+                if (stop_) { break; }
+                auto current = owner_->curr_page_.get();
+                if (last && last == current) {
+                    foster::ExclusiveLatchContext(&owner_->latch_);
+                    // check again with latch
+                    if (last && last == owner_->curr_page_.get()
+                            && last->slot_count() > 0)
+                    {
+                        owner_->release_current_epoch();
+                    }
+                }
+            }
+        }
+
+    private:
+        std::unique_ptr<std::thread> thread_;
+        ThisType* owner_;
+        unsigned timeout_;
+        std::atomic<bool> stop_;
+    };
+
 private:
     CArray<CArraySlot> carray_;
     Latch latch_;
     std::shared_ptr<Buffer<LogPage>> buffer_;
     std::shared_ptr<LogPage> curr_page_;
+    std::unique_ptr<TimeoutRelease> timeout_policy_;
 };
 
 } // namespace fineline

@@ -63,7 +63,7 @@ public:
     {
         std::unique_lock<std::mutex> lck {mutex_};
         auto condition = [this,epoch] {
-            return epoch <= hardened_epoch_.load() || shutdown_.load();
+            return epoch >= hardened_epoch_.load() || shutdown_.load();
         };
         auto timeout = std::chrono::microseconds(unsigned(WaitTimeoutMicrosec));
         while (cond_.wait_for(lck, timeout, condition)) {};
@@ -78,25 +78,23 @@ public:
             EpochNumber epoch {0};
             auto page = buffer_->consume(epoch);
             if (shutdown_.load()) { break; }
+            if (!page) { break; }
 
-            log_->append_page(*page);
-
+            log_->append_page(*page, epoch);
             assert<0>(hardened_epoch_ + 1 == epoch, "Log flusher missed an epoch!");
             hardened_epoch_++;
 
             // no need to acquire mutex because update is atomic and wait loop uses a timeout
             cond_.notify_all();
         }
+        assert<1>(shutdown_);
     }
 
     void shutdown()
     {
         std::unique_lock<std::mutex> lck {mutex_};
         shutdown_ = true;
-        // Flusher thread may be waiting on consume, so just insert an empty page (this seems
-        // easier than having a shutdown mechanism in the buffer.
-        EpochNumber epoch;
-        buffer_->produce(epoch);
+        buffer_->shutdown();
         cond_.notify_all();
     }
 

@@ -22,6 +22,7 @@
 #ifndef FINELINE_RINGBUFFER_H
 #define FINELINE_RINGBUFFER_H
 
+#include <atomic>
 #include <mutex>
 #include <condition_variable>
 
@@ -55,9 +56,16 @@ public:
     std::shared_ptr<T> consume(EpochNumber& epoch)
     {
         std::unique_lock<std::mutex> lck {mutex};
-        cond.wait(lck, [this]{ return !isEmpty() && !isReferenced(begin); });
+        cond.wait(lck, [this]{ return shutdown_ || (!isEmpty() && !isReferenced(begin)); });
+        if (shutdown_) { return std::shared_ptr<T>{nullptr}; }
         epoch = begin++;
         return allocate_ptr(epoch);
+    }
+
+    void shutdown() {
+        std::unique_lock<std::mutex> lck {mutex};
+        shutdown_ = true;
+        cond.notify_all();
     }
 
 private:
@@ -68,6 +76,7 @@ private:
 
     std::mutex mutex;
     std::condition_variable cond;
+    std::atomic<bool> shutdown_;
 
     std::shared_ptr<T> allocate_ptr(EpochNumber& cnt)
     {
