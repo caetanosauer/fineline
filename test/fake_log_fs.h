@@ -90,7 +90,7 @@ public:
         TASLock lock_;
     };
 
-    LogPageVector(const Options& opt)
+    LogPageVector(const Options& /*opt*/)
     {
         for (size_t i = 0; i < MaxLevels; i++) {
             files_[i] = std::make_shared<FakeLogFile>();
@@ -123,45 +123,62 @@ public:
     StdMapLogIndex(const Options&)
     {}
 
-    /*
-     * TODO extend this when we implement fetch, iterate, and merge
-     */
-
     void insert_block(
             uint32_t /* file */,
-            uint32_t block,
-            uint64_t /* partition */,
+            uint32_t /* block */,
+            uint64_t /* epoch */,
             uint64_t min,
             uint64_t max
     )
     {
-        min_index_[min] = std::make_pair(max, block);
+        blocks_.emplace_back(min, max);
     }
 
     class FetchBlockIterator
     {
     public:
-        FetchBlockIterator(StdMapLogIndex* owner, uint64_t key)
+        FetchBlockIterator(StdMapLogIndex* owner, uint64_t key, bool forward)
+            : owner_(owner), key_(key), forward_(forward),
+            pos_(forward ? 0 : owner_->blocks_.size() - 1)
         {
         }
 
-        bool next(uint64_t& partition, uint32_t& file, uint32_t& block)
+        /*
+         * since we don't support merge for now, just iterate over all blocks
+         */
+        bool next(uint32_t& file, uint32_t& block)
         {
-            // TODO
+            auto& vec = owner_->blocks_;
+            while (!pos_on_end()) {
+                if (key_ >= vec[pos_].first && key_ <= vec[pos_].second) {
+                    file = 1;
+                    block = pos_;
+                    advance_pos();
+                    return true;
+                }
+                advance_pos();
+            }
+
             return false;
         }
+
     private:
+        void advance_pos() { pos_ += forward_ ? 1 : -1; }
+        bool pos_on_end() { return forward_ ? (pos_ >= (int) owner_->blocks_.size()) : pos_ < 0; }
+
         StdMapLogIndex* owner_;
-        bool done_;
+        uint64_t key_;
+        bool forward_;
+        int pos_;
     };
 
-    std::unique_ptr<FetchBlockIterator> fetch_blocks(uint64_t key)
+    std::unique_ptr<FetchBlockIterator> fetch_blocks(uint64_t key, bool forward)
     {
-        return std::unique_ptr<FetchBlockIterator>{new FetchBlockIterator{this, key}};
+        return std::unique_ptr<FetchBlockIterator>{new FetchBlockIterator{this, key, forward}};
     }
 
 protected:
-    std::map<uint64_t, std::pair<uint64_t, uint32_t>> min_index_;
+    std::vector<std::pair<uint64_t, uint64_t>> blocks_;
 };
 
 } // namespace test

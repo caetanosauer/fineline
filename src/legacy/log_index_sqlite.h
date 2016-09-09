@@ -49,7 +49,7 @@ public:
     void insert_block(
             uint32_t file,
             uint32_t block,
-            uint64_t partition,
+            uint64_t epoch,
             uint64_t min,
             uint64_t max
     );
@@ -57,16 +57,16 @@ public:
     class FetchBlockIterator
     {
     public:
-        FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key);
+        FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key, bool forward);
         ~FetchBlockIterator();
-        bool next(uint64_t& partition, uint32_t& file, uint32_t& block);
+        bool next(uint32_t& file, uint32_t& block);
     private:
         SQLiteLogIndex* owner_;
         sqlite3_stmt* stmt_;
         bool done_;
     };
 
-    std::unique_ptr<FetchBlockIterator> fetch_blocks(uint64_t key);
+    std::unique_ptr<FetchBlockIterator> fetch_blocks(uint64_t key, bool forward);
 
     // Used for tests
     sqlite3* get_db() { return db_; }
@@ -84,6 +84,7 @@ private:
     sqlite3* db_;
     sqlite3_stmt* insert_stmt_;
     std::string db_path_;
+    unsigned max_level_;
 };
 
 } // namespace legacy

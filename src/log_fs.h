@@ -52,21 +52,21 @@ public:
         index_.reset(new LogIndex{options});
     }
 
-    void append_page(const LogPage& page)
+    template <class EpochNumber>
+    void append_page(const LogPage& page, EpochNumber epoch)
     {
+        assert<1>(page.slot_count() > 0);
         assert<3>(page.slots_are_sorted());
+
         LogKey min_key = page.get_slot(0).key;
         LogKey max_key = page.get_slot(page.slot_count() - 1).key;
 
+        assert<3>(max_key >= min_key);
+        assert<3>(max_key.node_id >= min_key.node_id);
+
         auto file = fs_->get_file_for_flush(FirstLevelFile);
-        // TODO we may crash after appending page but before inserting index info!
         size_t offset = file->append(&page);
-        // TODO we need a 64-bit PartitionNumber type
-        // with 8-bit merge depth and 56-bit partition number
-        // for depth=0, partition number is simple file_number (24-bit, FileNumber.lo())
-        // and block_number (32-bit)
-        uint64_t partition = (uint64_t(file->num().data()) << 32) & offset;
-        index_->insert_block(file->num().data(), offset, partition, min_key.node_id, max_key.node_id);
+        index_->insert_block(file->num().data(), offset, epoch, min_key.node_id, max_key.node_id);
     }
 
     using LogPageIterator = typename LogPage::Iterator;
@@ -75,20 +75,27 @@ public:
     class LogFileIterator
     {
     public:
-        LogFileIterator(ThisType* log, uint64_t key)
-            : log_(log), block_index_iter_ {std::move(log->index_->fetch_blocks(key))}
+        LogFileIterator(ThisType* log, uint64_t key, bool forward = true)
+            : log_(log), queried_key_(key), forward_(forward),
+            block_index_iter_ {std::move(log->index_->fetch_blocks(key, forward))}
         {
             next_block();
         }
 
         bool next(LogKey& key, char*& payload)
         {
-            if (!page_iter_.get()) { return false; }
-            bool has_more = page_iter_->next(key, payload);
-            if (!has_more) {
-                has_more = next_block();
-                if (!has_more) { return false; }
+            bool has_more = true;
+            while (has_more) {
+                if (!page_iter_.get()) { return false; }
                 has_more = page_iter_->next(key, payload);
+                if (!has_more) {
+                    has_more = next_block();
+                    if (!has_more) { return false; }
+                    has_more = page_iter_->next(key, payload);
+                }
+                if (has_more && queried_key_ == key.node_id) {
+                    return true;
+                }
             }
             return has_more;
         }
@@ -96,28 +103,29 @@ public:
     protected:
         bool next_block()
         {
-            uint64_t partition;
             uint32_t file;
             uint32_t block;
-            bool has_more = block_index_iter_->next(partition, file, block);
+            bool has_more = block_index_iter_->next(file, block);
             if (!has_more) { return false; }
 
             log_->fs_->get_file(file)->read(block, &page_);
-            page_iter_ = std::move(page_.iterate(false /* forward */));
+            page_iter_ = std::move(page_.iterate(forward_));
 
             return true;
         }
 
     private:
-        ThisType* log_;
         LogPage page_;
+        ThisType* log_;
+        uint64_t queried_key_;
+        bool forward_;
         std::unique_ptr<LogPageIterator> page_iter_;
         std::unique_ptr<FetchBlockIterator> block_index_iter_;
     };
 
-    std::unique_ptr<LogFileIterator> fetch(uint64_t key)
+    std::unique_ptr<LogFileIterator> fetch(uint64_t key, bool forward = true)
     {
-        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, key}};
+        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, key, forward}};
     }
 
 private:

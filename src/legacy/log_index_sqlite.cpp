@@ -35,30 +35,37 @@ using foster::assert;
 
 const auto CreateTablesQuery =
     "create table if not exists logblocks ("
+    "   first_epoch unsigned big int,"
+    "   last_epoch unsigned big int,"
+    "   level int,"
     "   file_number int,"
     "   block_number int,"
-    "   part_number unsigned big int,"
     "   min_key int,"
     "   max_key int,"
     "   bloom_filter blob(1024),"
-    "   primary key(file_number, block_number)"
+    "   primary key(level desc, first_epoch)"
     ");"
-    "create index if not exists nodeid_idx on logblocks ("
-    "   min_key, max_key desc);"
 ;
 
 const auto InsertBlockQuery =
-    "insert into logblocks values (?,?,?,?,?,NULL)";
+    "insert into logblocks values (?,?,0,?,?,?,?,NULL)";
 
-const auto FetchHistoryQuery =
-    "select part_number, file_number, block_number "
+const auto FetchForwardHistoryByLevelQuery =
+    "select file_number, block_number "
     "from logblocks "
-    "where ? >= min_key and ? <= max_key "
-    "order by part_number desc, file_number desc, block_number desc"
+    "where level = ? and ? >= min_key and ? <= max_key "
+    "order by first_epoch asc, last_epoch desc"
+;
+
+const auto FetchBackwardHistoryByLevelQuery =
+    "select file_number, block_number "
+    "from logblocks "
+    "where level = ? and ? >= min_key and ? <= max_key "
+    "order by last_epoch desc, first_epoch asc"
 ;
 
 SQLiteLogIndex::SQLiteLogIndex(const Options& options)
-    : db_(nullptr)
+    : db_(nullptr), max_level_(0) // TODO get max level during "recovery"
 {
     db_path_ = options.get<string>("log_index_path");
     if (options.get<bool>("log_index_path_relative")) {
@@ -107,16 +114,17 @@ void SQLiteLogIndex::finalize()
     sqlite3_finalize(insert_stmt_);
 }
 
-void SQLiteLogIndex::insert_block(uint32_t file, uint32_t block, uint64_t partition,
+void SQLiteLogIndex::insert_block(uint32_t file, uint32_t block, uint64_t epoch,
         uint64_t min, uint64_t max)
 {
     sql_check(sqlite3_reset(insert_stmt_));
 
-    sql_check(sqlite3_bind_int(insert_stmt_, 1, file));
-    sql_check(sqlite3_bind_int(insert_stmt_, 2, block));
-    sql_check(sqlite3_bind_int(insert_stmt_, 3, partition));
-    sql_check(sqlite3_bind_int(insert_stmt_, 4, min));
-    sql_check(sqlite3_bind_int(insert_stmt_, 5, max));
+    sql_check(sqlite3_bind_int(insert_stmt_, 1, epoch));
+    sql_check(sqlite3_bind_int(insert_stmt_, 2, epoch));
+    sql_check(sqlite3_bind_int(insert_stmt_, 3, file));
+    sql_check(sqlite3_bind_int(insert_stmt_, 4, block));
+    sql_check(sqlite3_bind_int(insert_stmt_, 5, min));
+    sql_check(sqlite3_bind_int(insert_stmt_, 6, max));
 
     int rc = SQLITE_BUSY;
     while (rc == SQLITE_BUSY) {
@@ -125,18 +133,23 @@ void SQLiteLogIndex::insert_block(uint32_t file, uint32_t block, uint64_t partit
     sql_check(rc, SQLITE_DONE);
 }
 
-std::unique_ptr<SQLiteLogIndex::FetchBlockIterator> SQLiteLogIndex::fetch_blocks(uint64_t key)
+std::unique_ptr<SQLiteLogIndex::FetchBlockIterator> SQLiteLogIndex::fetch_blocks(uint64_t key,
+        bool forward)
 {
-    return std::unique_ptr<FetchBlockIterator> { new FetchBlockIterator {this, key} };
+    return std::unique_ptr<FetchBlockIterator> { new FetchBlockIterator {this, key, forward} };
 }
 
-SQLiteLogIndex::FetchBlockIterator::FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key)
+SQLiteLogIndex::FetchBlockIterator::FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key,
+        bool forward)
 {
     owner_ = owner;
     done_ = false;
-    owner_->sql_check(sqlite3_prepare_v2(owner_->db_, FetchHistoryQuery, -1, &stmt_, 0));
-    owner_->sql_check(sqlite3_bind_int(stmt_, 1, key));
+    auto& query = forward ? FetchForwardHistoryByLevelQuery : FetchBackwardHistoryByLevelQuery;
+    owner_->sql_check(sqlite3_prepare_v2(owner_->db_, query, -1, &stmt_, 0));
+    // TODO: here's where we iterate over levels to fetch from merged partitions
+    owner_->sql_check(sqlite3_bind_int(stmt_, 1, 0));
     owner_->sql_check(sqlite3_bind_int(stmt_, 2, key));
+    owner_->sql_check(sqlite3_bind_int(stmt_, 3, key));
 }
 
 SQLiteLogIndex::FetchBlockIterator::~FetchBlockIterator()
@@ -144,7 +157,7 @@ SQLiteLogIndex::FetchBlockIterator::~FetchBlockIterator()
     owner_->sql_check(sqlite3_finalize(stmt_));
 }
 
-bool SQLiteLogIndex::FetchBlockIterator::next(uint64_t& partition, uint32_t& file, uint32_t& block)
+bool SQLiteLogIndex::FetchBlockIterator::next(uint32_t& file, uint32_t& block)
 {
     if (done_) { return false; }
 
@@ -157,9 +170,8 @@ bool SQLiteLogIndex::FetchBlockIterator::next(uint64_t& partition, uint32_t& fil
         return false;
     }
     else if (rc == SQLITE_ROW) {
-        partition = sqlite3_column_int64(stmt_, 1);
-        file = sqlite3_column_int(stmt_, 1);
-        block = sqlite3_column_int(stmt_, 2);
+        file = sqlite3_column_int(stmt_, 0);
+        block = sqlite3_column_int(stmt_, 1);
     }
     else {
         owner_->sql_check(rc);

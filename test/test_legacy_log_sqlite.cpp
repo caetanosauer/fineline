@@ -57,10 +57,11 @@ constexpr char TestSQLite::DBFile[];
 
 TEST_F(TestSQLite, InsertionTest)
 {
+    // file, block, epoch, min, max
     std::array<std::tuple<uint32_t, uint32_t, uint64_t, uint64_t, uint64_t>, 3> tuples;
-    tuples[0] = std::make_tuple(1, 1, 0, 10, 20);
-    tuples[1] = std::make_tuple(1, 2, 0, 15, 25);
-    tuples[2] = std::make_tuple(2, 1, 0, 10, 30);
+    tuples[0] = std::make_tuple(1, 1, 1, 10, 20);
+    tuples[1] = std::make_tuple(1, 2, 2, 15, 25);
+    tuples[2] = std::make_tuple(2, 1, 3, 10, 30);
 
     for (auto t : tuples) {
         log_->insert_block(std::get<0>(t), std::get<1>(t), std::get<2>(t), std::get<3>(t),
@@ -72,7 +73,7 @@ TEST_F(TestSQLite, InsertionTest)
     int rc;
     sqlite3_stmt* stmt;
     rc = sqlite3_prepare_v2(db,
-            "select file_number, block_number, part_number, min_key, max_key "
+            "select file_number, block_number, first_epoch, min_key, max_key "
             "from logblocks order by file_number, block_number",
             -1, &stmt, 0);
     ASSERT_EQ(rc, SQLITE_OK);

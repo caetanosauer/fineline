@@ -73,6 +73,49 @@ struct alignas(LogrecAlignment) LogrecHeader
             const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
             const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
     {
+        return cmp(a, b) < 0;
+    }
+
+    friend bool operator<=(
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
+    {
+        return cmp(a, b) <= 0;
+    }
+
+    friend bool operator>(
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
+    {
+        return cmp(a, b) > 0;
+    }
+
+    friend bool operator>=(
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
+    {
+        return cmp(a, b) >= 0;
+    }
+
+    friend bool operator==(
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
+    {
+        return cmp(a, b) == 0;
+    }
+
+    friend bool operator!=(
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
+    {
+        return cmp(a, b) != 0;
+    }
+
+private:
+    static int cmp(
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
+    {
         /*
          * "raw" comparison operator that uses the binary contents for comparison in order to
          * speed up sort and select operarions. This is also known as a "normalized key".
@@ -82,7 +125,7 @@ struct alignas(LogrecAlignment) LogrecHeader
         static_assert(sizeof(NodeId) == sizeof(SeqNum),
                 "LogrecHeader comparison currently requires the same types for NodeId and SeqNum");
 
-        return memcmp(&a, &b, sizeof(NodeId) + sizeof(SeqNum)) < 0;
+        return memcmp(&a, &b, sizeof(NodeId) + sizeof(SeqNum));
     }
 };
 
