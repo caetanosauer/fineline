@@ -42,12 +42,12 @@ class LogFlusher
 {
 public:
     using EpochNumber = typename Buffer<LogPage>::EpochNumber;
-    static constexpr unsigned WaitTimeoutMicrosec = 1000;
 
     LogFlusher(std::shared_ptr<Buffer<LogPage>> buffer,
             std::shared_ptr<PersistentLog<LogPage>> log)
-        : buffer_(buffer), log_(log), hardened_epoch_(0), shutdown_(false)
+        : buffer_(buffer), log_(log), shutdown_(false)
     {
+        hardened_epoch_ = buffer->get_current_epoch();
         // Thread runs continuously -- no need for a wakeup/wait mechanism.
         // It will wait on consume method of buffer anyway.
         thread_.reset(new std::thread {&LogFlusher::main_loop, this});
@@ -62,13 +62,10 @@ public:
     bool wait_until_hardened(EpochNumber epoch)
     {
         std::unique_lock<std::mutex> lck {mutex_};
-        auto condition = [this,epoch] {
-            return epoch >= hardened_epoch_.load() || shutdown_.load();
-        };
-        auto timeout = std::chrono::microseconds(unsigned(WaitTimeoutMicrosec));
-        while (cond_.wait_for(lck, timeout, condition)) {};
+        auto condition = [this,epoch] { return epoch <= hardened_epoch_ || shutdown_; };
+        cond_.wait(lck, condition);
 
-        if (shutdown_.load()) { return false; }
+        if (shutdown_) { return false; }
         return true;
     }
 
@@ -80,6 +77,7 @@ public:
             if (shutdown_.load()) { break; }
             if (!page) { break; }
 
+            page->sort_slots();
             log_->append_page(*page, epoch);
             assert<0>(hardened_epoch_ + 1 == epoch, "Log flusher missed an epoch!");
             hardened_epoch_++;

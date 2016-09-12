@@ -93,14 +93,14 @@ public:
         return epoch;
     }
 
-    static Reservation encode_reservation(SlotNumber slot, size_t payload_count)
+    static Reservation encode_reservation(SlotNumber slot, PayloadPtr payload_count)
     {
         assert<1>(payload_count < (1ul << PayloadBits));
         // one bit must be left for sign
         assert<1>(slot < (1ul << (PayloadBits-1)));
         assert<1>(slot > 0 && payload_count > 0);
 
-        return (slot << PayloadBits) + payload_count;
+        return (((Reservation) slot) << PayloadBits) + payload_count;
     }
 
     static std::pair<SlotNumber, PayloadPtr> decode_reservation(Reservation resv)
@@ -154,6 +154,7 @@ protected:
 
         // Step 2) allocate slots and payloads requested
         auto resv = decode_reservation(to_reserve);
+        assert<1>(resv.first > 0 && resv.second > 0);
         bool success = foster::preallocate_slots(*curr_page_, resv.first, resv.second,
                 cslot->first_slot, cslot->first_payload);
         assert<1>(success);
@@ -165,10 +166,10 @@ protected:
     template <class PrivateLogPage>
     void copy_to_target(const PrivateLogPage& plog, Reservation target, CArraySlot* cslot)
     {
-        auto target_payload = cslot->first_slot + decode_reservation(target).second;
-        auto target_slot = cslot->first_payload + decode_reservation(target).first;
+        SlotNumber target_slot = cslot->first_slot + decode_reservation(target).first;
+        PayloadPtr target_payload = cslot->first_payload + decode_reservation(target).second;
         foster::copy_records_prealloc(*curr_page_, target_slot, target_payload,
-                plog, 0u, plog.slot_count());
+                plog, SlotNumber{0}, plog.slot_count());
     }
 
     void leave_carray(CArraySlot* cslot, Reservation to_reserve)

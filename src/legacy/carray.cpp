@@ -89,7 +89,7 @@ ConsolidationArray<CArraySlot>::~ConsolidationArray() {
 
 
 template <class CArraySlot>
-CArraySlot* ConsolidationArray<CArraySlot>::join_slot(int32_t size, StatusType &old_count)
+CArraySlot* ConsolidationArray<CArraySlot>::join_slot(StatusType size, StatusType &old_count)
 {
     assert<1>(size > 0);
     auto idx = std::hash<std::thread::id>{}(std::this_thread::get_id());

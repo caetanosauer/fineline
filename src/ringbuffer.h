@@ -37,10 +37,8 @@ class AsyncRingBuffer
 public:
     using EpochNumber = EpochNumberType;
 
-    // epoch must start at 1, because 0 is reserved for the "empty" epoch
-    static constexpr EpochNumber InitialEpoch = 1;
-
-    AsyncRingBuffer() : begin(InitialEpoch), end(InitialEpoch)
+    AsyncRingBuffer(EpochNumber initial_epoch = 1)
+        : begin(initial_epoch), end(initial_epoch)
     {
         referenced.fill(false);
     }
@@ -62,10 +60,17 @@ public:
         return allocate_ptr(epoch);
     }
 
-    void shutdown() {
+    void shutdown()
+    {
         std::unique_lock<std::mutex> lck {mutex};
         shutdown_ = true;
         cond.notify_all();
+    }
+
+    EpochNumber get_current_epoch()
+    {
+        std::unique_lock<std::mutex> lck {mutex};
+        return end - 1;
     }
 
 private:

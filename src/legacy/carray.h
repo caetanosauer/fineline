@@ -165,7 +165,7 @@ public:
      * @param[out] status \b atomically obtained status of the joined slot
      * @return the slot we have just joined
      */
-    CArraySlot*         join_slot(int32_t size, StatusType &status);
+    CArraySlot*         join_slot(StatusType size, StatusType &status);
 
     /**
      * join the memcpy-complete queue but don't spin yet.
