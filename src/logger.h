@@ -49,8 +49,8 @@ public:
     template <typename... T>
     void log(LRType type, T... args)
     {
-        TxnContext::get()->
-            log(LogrecHeader{id_, ++seq_, type}, args...);
+        LogrecHeader hdr = {id_, ++seq_, type};
+        TxnContext::get()->log(hdr, args...);
     }
 
     void initialize(IdType id, bool logit = true)

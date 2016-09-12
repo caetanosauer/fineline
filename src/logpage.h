@@ -146,7 +146,7 @@ public:
     using ThisType = LogPage<PageSize, LogrecHeader>;
 
     template <typename... T>
-    bool try_insert(const LogrecHeader& hdr, T... args)
+    bool try_insert(LogrecHeader& hdr, T... args)
     {
         size_t length = LogEncoder<T...>::get_payload_length(args...);
 
@@ -163,10 +163,8 @@ public:
 
         char* addr = static_cast<char*>(this->get_payload(ptr));
         LogEncoder<T...>::encode(addr, args...);
-        this->get_slot(slot).key = hdr;
-        this->get_slot(slot).key.length = length;
-        this->get_slot(slot).ptr = ptr;
-        this->get_slot(slot).ghost = false;
+        hdr.length = length;
+        this->get_slot(slot) = { hdr, ptr, false };
 
         return true;
     }
@@ -191,6 +189,11 @@ public:
         this->get_slot(slot).ghost = false;
 
         return true;
+    }
+
+    size_t get_payload_length(SlotNumber s) const
+    {
+        return this->get_slot(s).key.length;
     }
 
     class Iterator : public AbstractLogIterator<Key>

@@ -27,6 +27,7 @@
 
 #include "assertions.h"
 #include "legacy/carray_slot.h"
+#include "move_records.h"
 
 // required for ExclusiveLatchContext, even though Latch is a template parameter
 // TODO: implement generic latch guard for read-write latches
@@ -102,7 +103,7 @@ public:
         return (slot << PayloadBits) + payload_count;
     }
 
-    static std::pair<SlotNumber, size_t> decode_reservation(Reservation resv)
+    static std::pair<SlotNumber, PayloadPtr> decode_reservation(Reservation resv)
     {
         return std::make_pair(resv >> PayloadBits, (resv << PayloadBits) >> PayloadBits);
     }
@@ -152,19 +153,9 @@ protected:
         cslot->log_page = curr_page_;
 
         // Step 2) allocate slots and payloads requested
-        // TODO: log page class can abstract this reservation for us
-        cslot->first_slot = curr_page_->slot_count();
         auto resv = decode_reservation(to_reserve);
-        auto slot_count = resv.first;
-        for (SlotNumber s = 0; s < slot_count; s++) {
-            bool success = curr_page_->insert_slot(curr_page_->slot_count());
-            assert<1>(success);
-        }
-
-        cslot->first_payload = curr_page_->get_first_payload();
-        PayloadPtr dest_ptr;
-        auto payload_count = resv.second;
-        bool success = curr_page_->allocate_payload(dest_ptr, payload_count * PayloadBlockSize);
+        bool success = foster::preallocate_slots(*curr_page_, resv.first, resv.second,
+                cslot->first_slot, cslot->first_payload);
         assert<1>(success);
 
         // Step 3) release latch to allow copies and insertions by other threads
@@ -174,24 +165,10 @@ protected:
     template <class PrivateLogPage>
     void copy_to_target(const PrivateLogPage& plog, Reservation target, CArraySlot* cslot)
     {
-        auto payload_count = decode_reservation(target).second;
-        auto target_payload = cslot->first_payload - payload_count;
-
-        // TODO: this can also be abstracted, like we did for move_kv_records
-        // slots cannot be copied with memcpy because slot size might be different in plog page
-        for (SlotNumber s = 0; s < plog.slot_count(); s++) {
-            auto& src = plog.get_slot(s);
-            auto& dest = curr_page_->get_slot(cslot->first_slot + s);
-            dest.key = src.key;
-            dest.ghost = src.ghost;
-            dest.ptr = cslot->first_payload - (plog.get_payload_end() - src.ptr);
-        }
-
-        // now copy payloads
-        ::memcpy(cslot->log_page->get_payload(target_payload),
-                plog.get_payload(plog.get_first_payload()),
-                payload_count * PayloadBlockSize);
-
+        auto target_payload = cslot->first_slot + decode_reservation(target).second;
+        auto target_slot = cslot->first_payload + decode_reservation(target).first;
+        foster::copy_records_prealloc(*curr_page_, target_slot, target_payload,
+                plog, 0u, plog.slot_count());
     }
 
     void leave_carray(CArraySlot* cslot, Reservation to_reserve)

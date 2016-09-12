@@ -55,7 +55,7 @@ public:
     }
 
     template <typename... T>
-    void log(const Key& hdr, const T&... args)
+    void log(Key& hdr, const T&... args)
     {
         if (has_overflown_) {
             overflow_.log(hdr, args...);
@@ -125,7 +125,7 @@ public:
     {}
 
     template <typename... T>
-    void log(const Key& hdr, const T&... args)
+    void log(Key& hdr, const T&... args)
     {
         if (!curr_page_) { add_new_page(); }
 

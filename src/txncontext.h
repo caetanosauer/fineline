@@ -67,13 +67,13 @@ public:
         // TODO
     }
 
-    template <class... Args>
-    void log(const Args&... args)
+    template <class Hdr, class... Args>
+    void log(Hdr& hdr, const Args&... args)
     {
         if (!active_) {
             throw std::runtime_error("Cannot log on inactive transaction context");
         }
-        plog_.log(args...);
+        plog_.log(hdr, args...);
     }
 
     Plog* get_plog() { return &plog_; }
