@@ -53,12 +53,15 @@ TEST(TestInsertions, SimpleInsertions)
         ctx.commit();
     }
 
-    // TODO this is needed for now because we don't have a group-commit timeout
-    TestEnv::commit_buffer->force_current_page();
-
     {
         TxnLogger logger;
         fineline::map::recover(recovered_map, logger, LOGGER_ID);
+    }
+
+    for (auto e : recovered_map) {
+        auto it = recovered_map.find(e.first);
+        ASSERT_TRUE(it != recovered_map.end());
+        ASSERT_EQ(it->second, e.second);
     }
 }
 

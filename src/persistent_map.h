@@ -54,6 +54,9 @@ void redo(Map& map, const LogrecHeader& hdr, char* payload)
         case LRType::Insert:
             map.insert(std::make_pair(key, value));
             break;
+        case LRType::Construct:
+            // nothing to do
+            break;
         default:
             auto what = "I don't know how to redo this log record";
             throw std::runtime_error(what);
