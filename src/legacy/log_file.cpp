@@ -155,7 +155,7 @@ void log_file<PageSize>::close_for_read()
     std::unique_lock<std::mutex> lck(_mutex);
 
     if (_fhdl_rd != invalid_fhdl)  {
-        check_error(::close(_fhdl_app));
+        check_error(::close(_fhdl_rd));
         _fhdl_rd = invalid_fhdl;
     }
 }

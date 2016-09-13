@@ -258,10 +258,12 @@ template <size_t H, size_t L>
 inline std::istream& operator>>(std::istream& i, UnsignedNumberPair<H,L>& l)
 {
     char c;
-    typename UnsignedNumberPair<H,L>::LowType d;
-    typename UnsignedNumberPair<H,L>::HighType f;
+    uint64_t d;
+    uint64_t f;
     i >> f >> c >> d;
-    l = UnsignedNumberPair<H, L>{f, d};
+    l = UnsignedNumberPair<H, L>{
+        (typename UnsignedNumberPair<H,L>::HighType) f,
+        (typename UnsignedNumberPair<H,L>::LowType) d};
     return i;
 }
 
