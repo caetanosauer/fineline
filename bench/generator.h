@@ -37,18 +37,16 @@ enum class DistributionType
     // TODO add more
 };
 
-template <DistributionType type>
+template <DistributionType type, class T>
 struct GetDistribution
 {
 };
 
-template <>
-struct GetDistribution<DistributionType::Uniform>
+template <class T>
+struct GetDistribution<DistributionType::Uniform, T>
 {
     using Error = void;
-
-    template <class T>
-    using templ = typename
+    using type = typename
         // if T is integer
         std::conditional<std::is_integral<T>::value,
             // return int distribution
@@ -65,46 +63,69 @@ struct GetDistribution<DistributionType::Uniform>
 
 template <
     class T,
-    class Gen,
-    template <class> class Distr,
+    T Min,
     T Max,
-    T Min = T{0}
+    DistributionType Distr = DistributionType::Uniform,
+    class Gen = DefaultGenerator
 >
-T random()
+class NumberGenerator
 {
-    static Gen generator;
-    static Distr<T> distr {Min, Max};
-    return distr(generator);
-}
+public:
+    using Distribution = typename GetDistribution<Distr,T>::type;
 
-template <class T, T Max, T Min = T{0}>
-T random_uniform()
-{
-    return random<T, DefaultGenerator, GetDistribution<DistributionType::Uniform>::templ, Max, Min>
-        ();
-}
+    NumberGenerator()
+        : distr(Min, Max)
+    {}
 
-template<class Opt>
-std::string generate_string()
-{
-    static constexpr char alphabet[] =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        "abcdefghijklmnopqrstuvwxyz";
-    static constexpr size_t alphabet_size = std::extent<decltype(alphabet)>::value;
-
-    auto len = Opt::MaxLength;
-    if (Opt::RandomLength) {
-        len = random_uniform<size_t, Opt::MaxLength, 1>();
+    T next()
+    {
+        return distr(generator);
     }
 
-    std::string str(size_t{len}, 'b');
-    for (unsigned i = 0; i < len; i++) {
-        auto r = random_uniform<size_t, alphabet_size - 1>();
-        str[i] = alphabet[r];
+protected:
+    Gen generator;
+    Distribution distr;
+};
+
+static constexpr char Alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+static constexpr size_t AlphabetSize = std::extent<decltype(Alphabet)>::value;
+
+template<
+    size_t MinLength,
+    size_t MaxLength,
+    DistributionType LengthDistr = DistributionType::Uniform,
+    class Gen = DefaultGenerator
+>
+class StringGenerator
+{
+public:
+
+    StringGenerator()
+        : str_(MaxLength, '\0')
+    {}
+
+    std::string& next()
+    {
+        auto len = MaxLength;
+        if (MinLength < MaxLength) {
+            len = len_gen_.next();
+            str_.resize(len);
+        }
+
+        for (unsigned i = 0; i < len; i++) {
+            auto r = char_gen_.next();
+            str_[i] = Alphabet[r];
+        }
+
+        return str_;
     }
 
-    return str;
-}
+protected:
+
+    std::string str_;
+    NumberGenerator<size_t, 0, MaxLength, LengthDistr> len_gen_;
+    NumberGenerator<size_t, 1, AlphabetSize-1, DistributionType::Uniform> char_gen_;
+};
 
 } // namespace gen
 } // namespace fineline

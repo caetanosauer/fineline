@@ -4,18 +4,16 @@
 
 using namespace fineline;
 
-struct StringOpt {
-    static constexpr size_t MaxLength = 100;
-    static constexpr bool RandomLength = true;
-};
-
 int main(int, char**)
 {
+    gen::StringGenerator<1,100> strgen;
+    gen::NumberGenerator<unsigned, 1,100> numgen;
+
     // Little test program just to see if the two functions are working as expected
     for (int i = 0; i < 100; i++) {
         std::cout
-            << "k=" << gen::random_uniform<unsigned, 100>() << '\t'
-            << "v=" << gen::generate_string<StringOpt>()
+            << "k=" << numgen.next() << '\t'
+            << "v=" << strgen.next()
             << std::endl;
     }
 
