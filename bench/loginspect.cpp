@@ -19,45 +19,19 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef FINELINE_BENCH_CONTAINER_H
-#define FINELINE_BENCH_CONTAINER_H
+#include "loginspect.h"
 
-#include "persistent_map.h"
+#include "fineline.h"
 
-namespace fineline {
+using namespace fineline;
 
-template <
-    class Map,
-    class Logger
->
-class PersistentMap
+int main(int argc, char** argv)
 {
-public:
+    fineline::init(argc, argv);
 
-    // TODO id 1 does not work because of how log page scan is filtered in log files
-    PersistentMap(unsigned id = 0)
-    {
-        // TODO static ID intialization + logging
-        logger_.initialize(id, false);
-    }
+    loginspect::LogInspector<DftPersistentLog>::PrintCallback callback;
+    loginspect::LogInspector<DftPersistentLog> ins {SysEnv::log};
+    ins.exec(callback);
 
-    template <typename... Args>
-    void put(Args... args)
-    {
-        map::insert(map_, logger_, args...);
-    }
-
-    template <typename K, typename V>
-    void get(const K& key, V& value)
-    {
-        value = map_[key];
-    }
-
-protected:
-    Logger logger_;
-    Map map_;
-};
-
-} // namespace fineline
-
-#endif
+    return EXIT_SUCCESS;
+}

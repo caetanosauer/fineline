@@ -22,6 +22,8 @@
 #ifndef FINELINE_LOGHEADER_H
 #define FINELINE_LOGHEADER_H
 
+#include <ostream>
+
 #include "lrtype.h"
 #include "encoding.h"
 

@@ -19,45 +19,58 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef FINELINE_BENCH_CONTAINER_H
-#define FINELINE_BENCH_CONTAINER_H
+#ifndef FINELINE_BENCH_LOGINSPECT_H
+#define FINELINE_BENCH_LOGINSPECT_H
 
-#include "persistent_map.h"
+#include <iostream>
+#include <memory>
 
 namespace fineline {
+namespace loginspect {
 
 template <
-    class Map,
-    class Logger
+    class Log
 >
-class PersistentMap
+class LogInspector
 {
 public:
 
-    // TODO id 1 does not work because of how log page scan is filtered in log files
-    PersistentMap(unsigned id = 0)
+    using LogrecHeader = typename Log::LogKey;
+
+    LogInspector(std::shared_ptr<Log> log)
+        : log(log)
+    {}
+
+    template <
+        class Callback,
+        class Filter = std::function<bool(const LogrecHeader&)>
+    >
+    void exec(Callback f, bool forward = true,
+            Filter filter = [](const LogrecHeader&) { return true; })
     {
-        // TODO static ID intialization + logging
-        logger_.initialize(id, false);
+        auto iter = log->scan(filter, forward);
+        LogrecHeader hdr;
+        char* payload;
+        while (iter->next(hdr, payload)) {
+            f(hdr, payload);
+        }
     }
 
-    template <typename... Args>
-    void put(Args... args)
+    struct PrintCallback
     {
-        map::insert(map_, logger_, args...);
-    }
+        std::ostream& out = std::cout;
 
-    template <typename K, typename V>
-    void get(const K& key, V& value)
-    {
-        value = map_[key];
-    }
+        void operator()(const LogrecHeader& hdr, char*) const
+        {
+            out << hdr << std::endl;
+        }
+    };
 
-protected:
-    Logger logger_;
-    Map map_;
+private:
+    std::shared_ptr<Log> log;
 };
 
+} // namespace loginspect
 } // namespace fineline
 
 #endif

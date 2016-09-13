@@ -66,6 +66,9 @@ public:
         {
         }
 
+        void open_for_read() {};
+        void open_for_append() {};
+
         void read(BlockOffset i, void* dest)
         {
             if (vector_.size() <= i) {

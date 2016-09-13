@@ -75,8 +75,9 @@ public:
     class LogFileIterator
     {
     public:
-        LogFileIterator(ThisType* log, uint64_t key, bool forward = true)
-            : log_(log), queried_key_(key), forward_(forward),
+        template <class Filter>
+        LogFileIterator(ThisType* log, Filter filter, uint64_t key = 0, bool forward = true)
+            : log_(log), queried_key_(key), filter_(filter), forward_(forward),
             block_index_iter_ {std::move(log->index_->fetch_blocks(key, forward))}
         {
             next_block();
@@ -93,7 +94,7 @@ public:
                     if (!has_more) { return false; }
                     has_more = page_iter_->next(key, payload);
                 }
-                if (has_more && queried_key_ == key.node_id()) {
+                if (has_more && filter_(key)) {
                     return true;
                 }
             }
@@ -108,7 +109,11 @@ public:
             bool has_more = block_index_iter_->next(file, block);
             if (!has_more) { return false; }
 
-            log_->fs_->get_file(file)->read(block, &page_);
+            auto f = log_->fs_->get_file(file);
+            // TODO: eventually we'll get "too many fles open"
+            // Some kind of ref-counted handler should be used for log files
+            f->open_for_read();
+            f->read(block, &page_);
             page_iter_ = std::move(page_.iterate(forward_));
 
             return true;
@@ -118,6 +123,7 @@ public:
         LogPage page_;
         ThisType* log_;
         uint64_t queried_key_;
+        std::function<bool(const LogKey&)> filter_;
         bool forward_;
         std::unique_ptr<LogPageIterator> page_iter_;
         std::unique_ptr<FetchBlockIterator> block_index_iter_;
