@@ -62,11 +62,11 @@ public:
         LogKey max_key = page.get_slot(page.slot_count() - 1).key;
 
         assert<3>(max_key >= min_key);
-        assert<3>(max_key.node_id >= min_key.node_id);
+        assert<3>(max_key.node_id() >= min_key.node_id());
 
         auto file = fs_->get_file_for_flush(FirstLevelFile);
         size_t offset = file->append(&page);
-        index_->insert_block(file->num().data(), offset, epoch, min_key.node_id, max_key.node_id);
+        index_->insert_block(file->num().data(), offset, epoch, min_key.node_id(), max_key.node_id());
     }
 
     using LogPageIterator = typename LogPage::Iterator;
@@ -93,7 +93,7 @@ public:
                     if (!has_more) { return false; }
                     has_more = page_iter_->next(key, payload);
                 }
-                if (has_more && queried_key_ == key.node_id) {
+                if (has_more && queried_key_ == key.node_id()) {
                     return true;
                 }
             }
@@ -125,7 +125,14 @@ public:
 
     std::unique_ptr<LogFileIterator> fetch(uint64_t key, bool forward = true)
     {
-        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, key, forward}};
+        auto pred = [key](const LogKey& hdr) { return hdr.node_id() == key; };
+        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, pred, key, forward}};
+    }
+
+    template <class Filter>
+    std::unique_ptr<LogFileIterator> scan(Filter filter, bool forward = true)
+    {
+        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, filter, 0, forward}};
     }
 
 private:

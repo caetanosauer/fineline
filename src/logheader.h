@@ -23,6 +23,7 @@
 #define FINELINE_LOGHEADER_H
 
 #include "lrtype.h"
+#include "encoding.h"
 
 namespace fineline {
 
@@ -45,14 +46,11 @@ struct alignas(LogrecAlignment) LogrecHeader
     LogrecHeader() {}
 
     LogrecHeader(NodeId id, SeqNum seq, LRType type)
-        : node_id(id), seq_num(seq), type(type)
+        : node_id_(foster::swap_endianness(id)), seq_num_(foster::swap_endianness(seq)),
+        type_(type)
         // length is set by LogPage
     {}
 
-    NodeId node_id;
-    SeqNum seq_num;
-    LogrecLength length;
-    LRType type;
 
     friend bool operator<(
             const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
@@ -96,6 +94,24 @@ struct alignas(LogrecAlignment) LogrecHeader
         return cmp(a, b) != 0;
     }
 
+    friend std::ostream& operator<<(std::ostream& out,
+            const LogrecHeader<NodeId, SeqNum, LogrecLength>& hdr)
+    {
+        return out
+            << "{id: " << hdr.node_id()
+            << ", seq: " << hdr.seq_num()
+            << ", len: " << hdr.length()
+            << ", type: " << foster::LRTypeString{}(hdr.type())
+            << "}";
+    }
+
+    void set_length(LogrecLength len) { length_ = len; }
+
+    NodeId node_id() const { return foster::swap_endianness(node_id_); };
+    SeqNum seq_num() const { return foster::swap_endianness(seq_num_); };
+    LogrecLength length() const { return length_; }
+    LRType type() const { return type_; }
+
 private:
     static int cmp(
             const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
@@ -112,6 +128,11 @@ private:
 
         return memcmp(&a, &b, sizeof(NodeId) + sizeof(SeqNum));
     }
+
+    NodeId node_id_;
+    SeqNum seq_num_;
+    LogrecLength length_;
+    LRType type_;
 };
 
 } // namespace fineline

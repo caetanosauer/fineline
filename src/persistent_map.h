@@ -55,7 +55,7 @@ void redo(Map& map, const LogrecHeader& hdr, char* payload)
     V value;
     LogEncoder<K, V>::decode(payload, &key, &value);
 
-    switch (hdr.type) {
+    switch (hdr.type()) {
         case LRType::Insert:
             map.insert(std::make_pair(key, value));
             break;

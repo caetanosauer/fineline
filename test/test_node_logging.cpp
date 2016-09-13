@@ -141,7 +141,7 @@ TEST(TestRedo, SimpleInsertionRedo)
 
     auto iter = ctx.get_plog()->iterate();
     while (iter->next(hdr, payload)) {
-        auto lr = fineline::ConstructLogRec(hdr.type, node_r, payload);
+        auto lr = fineline::ConstructLogRec(hdr.type(), node_r, payload);
         // std::cout << "REDOING " << *lr << std::endl;
         lr->redo();
     }

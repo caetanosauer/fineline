@@ -71,7 +71,7 @@ public:
 
         char* addr = static_cast<char*>(this->get_payload(ptr));
         LogEncoder<T...>::encode(addr, args...);
-        hdr.length = length;
+        hdr.set_length(length);
         this->get_slot(slot) = { hdr, ptr, false };
 
         return true;
@@ -80,18 +80,18 @@ public:
     bool try_insert_raw(const LogrecHeader& hdr, const char* payload)
     {
         typename LogPage::PayloadPtr ptr;
-        if (!this->allocate_payload(ptr, hdr.length)) {
+        if (!this->allocate_payload(ptr, hdr.length())) {
             return false;
         }
 
         auto slot = this->slot_count();
         if (!this->insert_slot(slot)) {
-            this->free_payload(ptr, hdr.length);
+            this->free_payload(ptr, hdr.length());
             return false;
         }
 
         char* addr = static_cast<char*>(this->get_payload(ptr));
-        ::memcpy(addr, payload, hdr.length);
+        ::memcpy(addr, payload, hdr.length());
         this->get_slot(slot).key = hdr;
         this->get_slot(slot).ptr = ptr;
         this->get_slot(slot).ghost = false;
@@ -101,7 +101,7 @@ public:
 
     size_t get_payload_length(SlotNumber s) const
     {
-        return this->get_slot(s).key.length;
+        return this->get_slot(s).key.length();
     }
 
     class Iterator : public AbstractLogIterator<Key>
