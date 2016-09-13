@@ -22,12 +22,15 @@
 #ifndef FINELINE_BENCH_GENERATOR_H
 #define FINELINE_BENCH_GENERATOR_H
 
-#include <iostream>
 #include <random>
 #include <type_traits>
 
+#include "assertions.h"
+
 namespace fineline {
 namespace gen {
+
+using foster::assert;
 
 using DefaultGenerator = std::mt19937;
 
@@ -46,25 +49,25 @@ template <class T>
 struct GetDistribution<DistributionType::Uniform, T>
 {
     using Error = void;
-    using type = typename
+    using type =
         // if T is integer
-        std::conditional<std::is_integral<T>::value,
+        typename std::conditional<std::is_integral<T>::value,
             // return int distribution
             std::uniform_int_distribution<T>,
             // else if T is floating point
-            std::conditional<std::is_floating_point<T>::value,
+            typename std::conditional<std::is_floating_point<T>::value,
                 // return real distribution
                 std::uniform_real_distribution<T>,
                 // else return Error
                 Error
-            >
+            >::type
         >::type;
 };
 
 template <
     class T,
-    T Min,
-    T Max,
+    long Min,
+    long Max,
     DistributionType Distr = DistributionType::Uniform,
     class Gen = DefaultGenerator
 >
@@ -74,7 +77,7 @@ public:
     using Distribution = typename GetDistribution<Distr,T>::type;
 
     NumberGenerator()
-        : distr(Min, Max)
+        : distr((T) Min, (T) Max)
     {}
 
     T next()
@@ -126,6 +129,43 @@ protected:
     NumberGenerator<size_t, 0, MaxLength, LengthDistr> len_gen_;
     NumberGenerator<size_t, 1, AlphabetSize-1, DistributionType::Uniform> char_gen_;
 };
+
+/**
+ * Thanks to http://www.cse.usf.edu/~christen/tools/genzipf.c
+ */
+template <class T>
+void generate_zipf(std::vector<T>& vec, double alpha, size_t domain_size, size_t count)
+{
+    static_assert(std::is_integral<T>::value,
+            "Zipf distribution can only be generated on integer keys");
+
+    NumberGenerator<double, 0, 1> gen;
+    double z;
+
+    // Compute normalization constant
+    double c = 0;
+    for (unsigned i = 1; i <= domain_size; i++) {
+        c += (1.0 / std::pow((double) i, alpha));
+    }
+    c = 1.0 / c;
+
+    for (unsigned j = 0; j < count; j++) {
+        // Pull a uniform random number (0 < z < 1)
+        do { z = gen.next(); } while ((z == 0) || (z == 1));
+
+        // Map z to the value
+        double sum_prob = 0.0;
+        for (T i = 1; i <= domain_size; i++) {
+            sum_prob = sum_prob + c / pow((double) i, alpha);
+            if (sum_prob >= z) {
+                vec.push_back(i);
+                break;
+            }
+        }
+
+        assert<3>(vec.size() == j+1);
+    }
+}
 
 } // namespace gen
 } // namespace fineline
