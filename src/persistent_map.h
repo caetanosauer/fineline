@@ -22,6 +22,11 @@
 #ifndef FINELINE_PERSISTENT_MAP_H
 #define FINELINE_PERSISTENT_MAP_H
 
+#include <stdexcept>
+
+#include "lrtype.h"
+#include "logpage.h"
+
 namespace fineline {
 namespace map {
 
