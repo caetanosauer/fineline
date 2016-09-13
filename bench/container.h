@@ -40,10 +40,10 @@ public:
         map::insert(map_, logger_, args...);
     }
 
-    template <typename T, typename... Args>
-    T get(Args... args)
+    template <typename K, typename V>
+    void get(const K& key, V& value)
     {
-        return *(map_.find(args...));
+        value = map_[key];
     }
 
 protected:
