@@ -36,6 +36,7 @@ using DftLogger = TxnLogger<DftTxnContext, DftLogrecHeader>;
  * the default types specified above.
  */
 void init(const Options& = Options{});
+void init(int argc, char** argv);
 
 class SysEnv
 {

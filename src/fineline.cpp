@@ -29,6 +29,11 @@ void init(const Options& options)
     SysEnv::initialize(options);
 }
 
+void init(int argc, char** argv)
+{
+    SysEnv::initialize(Options{argc, argv});
+}
+
 void SysEnv::do_init(const Options& options)
 {
     log_buffer = std::make_shared<DftLogBuffer>();
