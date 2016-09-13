@@ -46,7 +46,7 @@ public:
     using Key = typename LogPage::Key;
 
     TxnPrivateLog()
-        : page_(), has_overflown_(false)
+        : page_(), has_overflown_(false), size_(0)
     {
     }
 
@@ -67,6 +67,8 @@ public:
             start_overflow();
             log(hdr, args...);
         }
+
+        size_++;
     }
 
     std::unique_ptr<AbstractLogIterator<Key>> iterate()
@@ -90,6 +92,8 @@ public:
         }
     }
 
+    size_t size() const { return size_; }
+
 protected:
 
     void start_overflow()
@@ -107,7 +111,9 @@ protected:
         LogPage page_;
         OverflowPlog overflow_;
     };
+
     bool has_overflown_;
+    size_t size_;
 };
 
 template <class LogPage>

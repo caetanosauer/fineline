@@ -51,6 +51,11 @@ public:
 
     bool commit()
     {
+        if (plog_.size() == 0) {
+            // read-only transaction
+            return true;
+        }
+
         // Step 1) Insert log pages into commit buffer
         EpochNumber epoch {0};
         plog_.insert_into_buffer(SysEnv::commit_buffer.get(), epoch);
