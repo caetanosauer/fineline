@@ -22,17 +22,10 @@
 #ifndef FINELINE_LOGPAGE_H
 #define FINELINE_LOGPAGE_H
 
-/**
- * \file kv_array.h
- *
- * A fixed-length array that encodes arbitrary key-value pairs and stores them in a slot array in
- * the appropriate position.
- */
-
 #include "assertions.h"
 #include "encoding.h"
-#include "lrtype.h"
 #include "slot_array.h"
+#include "logheader.h"
 
 #include <memory>
 
@@ -43,91 +36,6 @@ using foster::assert;
 
 template <typename... T>
 using LogEncoder = typename foster::VariadicEncoder<foster::InlineEncoder, T...>;
-
-// Default alignment = 1/2 of typical cache line (64B)
-constexpr size_t LogrecAlignment = 32;
-
-template <
-    class NodeId = uint32_t,
-    class SeqNum = uint32_t,
-    class LogrecLength = uint16_t
->
-struct alignas(LogrecAlignment) LogrecHeader
-{
-    using IdType = NodeId;
-    using SeqNumType = SeqNum;
-
-    LogrecHeader() {}
-
-    LogrecHeader(NodeId id, SeqNum seq, LRType type)
-        : node_id(id), seq_num(seq), type(type)
-        // length is set by LogPage
-    {}
-
-    NodeId node_id;
-    SeqNum seq_num;
-    LogrecLength length;
-    LRType type;
-
-    friend bool operator<(
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
-    {
-        return cmp(a, b) < 0;
-    }
-
-    friend bool operator<=(
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
-    {
-        return cmp(a, b) <= 0;
-    }
-
-    friend bool operator>(
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
-    {
-        return cmp(a, b) > 0;
-    }
-
-    friend bool operator>=(
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
-    {
-        return cmp(a, b) >= 0;
-    }
-
-    friend bool operator==(
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
-    {
-        return cmp(a, b) == 0;
-    }
-
-    friend bool operator!=(
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
-    {
-        return cmp(a, b) != 0;
-    }
-
-private:
-    static int cmp(
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& a,
-            const LogrecHeader<NodeId, SeqNum, LogrecLength>& b)
-    {
-        /*
-         * "raw" comparison operator that uses the binary contents for comparison in order to
-         * speed up sort and select operarions. This is also known as a "normalized key".
-         * Because I am not sure about the implications of different struct alignments, I am
-         * asserting that the two key fields are of the same size.
-         */
-        static_assert(sizeof(NodeId) == sizeof(SeqNum),
-                "LogrecHeader comparison currently requires the same types for NodeId and SeqNum");
-
-        return memcmp(&a, &b, sizeof(NodeId) + sizeof(SeqNum));
-    }
-};
 
 template <class Key>
 class AbstractLogIterator
