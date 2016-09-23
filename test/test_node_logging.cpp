@@ -27,7 +27,6 @@
 #include "slot_array.h"
 #include "encoding.h"
 #include "search.h"
-#include "kv_array.h"
 #include "node.h"
 #include "pointers.h"
 
@@ -37,102 +36,61 @@ using TxnContext = fineline::test::FakeTxnContext<TestEnv>;
 
 constexpr size_t DftArrayBytes = 8192;
 constexpr size_t DftAlignment = 8;
+using PMNK = uint32_t;
 
-template<class PMNK_Type>
-using SArray = foster::SlotArray<PMNK_Type, DftArrayBytes, DftAlignment>;
+using SArray = foster::SlotArray<
+    PMNK,
+    DftArrayBytes,
+    DftAlignment,
+    fineline::test::FakeLogger<TestEnv>
+>;
 
 template<class K, class V>
-using KVArray = foster::KeyValueArray<K, V,
-      SArray<uint16_t>,
-      foster::BinarySearch<SArray<uint16_t>>,
-      foster::DefaultEncoder<K, V, uint16_t>,
+using BaseNode = foster::Node<K, V,
+      foster::BinarySearch<SArray>,
+      foster::GetEncoder<PMNK>::template type,
       fineline::test::FakeLogger<TestEnv>
 >;
 
-template<class K, class V>
-using BTNode = foster::BtreeNode<K, V,
-    KVArray,
-    foster::PlainPtr
->;
+// template<class K, class V>
+// using Node = foster::FosterNode<K, V,
+//       BaseNode,
+//       foster::AssignmentEncoder
+// >;
+
+using N = BaseNode<string, string>;
+using Ptr = foster::PlainPtr<SArray>;
 
 TEST(TestInsertions, SimpleInsertions)
 {
     TxnContext ctx;
 
-    BTNode<string, string> node;
-    ASSERT_TRUE(node.is_low_key_infinity());
-    ASSERT_TRUE(node.is_high_key_infinity());
-    node.insert("key", "value");
-    node.insert("key2", "value_2");
-    node.insert("key0", "value__0");
-    node.insert("key1", "value___1");
-    node.insert("key3", "value____3");
-    ASSERT_TRUE(node.is_sorted());
+    SArray n; Ptr node {&n};
+    N::insert(node, "key", "value");
+    N::insert(node, "key2", "value_2");
+    N::insert(node, "key0", "value__0");
+    N::insert(node, "key1", "value___1");
+    N::insert(node, "key3", "value____3");
+    ASSERT_TRUE(N::is_sorted(node));
 
     string v;
     bool found;
-
-    found = node.find("key0", &v);
+    found = N::find(node, "key0", v);
     ASSERT_TRUE(found);
     ASSERT_EQ(v, "value__0");
-}
-
-TEST(TestSplit, SimpleSplit)
-{
-    TxnContext ctx;
-
-    using NodePointer = BTNode<string, string>::NodePointer;
-
-    BTNode<string, string> node;
-    node.insert("key2", "value_2");
-    node.insert("key0", "value__0");
-    node.insert("key1", "value___1");
-    node.insert("key3", "value____3");
-    node.insert("key4", "value_____4");
-    node.insert("key5", "value______5");
-
-    BTNode<string, string> node2;
-
-    node.add_foster_child(NodePointer(&node2));
-    ASSERT_TRUE(node.is_low_key_infinity());
-    ASSERT_TRUE(node.is_high_key_infinity());
-    ASSERT_TRUE(node2.is_low_key_infinity());
-    ASSERT_TRUE(node2.is_high_key_infinity());
-    ASSERT_TRUE(node.get_foster_child() == NodePointer(&node2));
-
-    node.rebalance_foster_child<NodePointer>();
-    EXPECT_TRUE(!node.is_foster_empty());
-    string key;
-    node.get_foster_key(&key);
-    EXPECT_EQ(key, "key3");
-    ASSERT_TRUE(node.is_low_key_infinity());
-    ASSERT_TRUE(node.is_high_key_infinity());
-
-    node2.get_fence_keys(&key, nullptr);
-    ASSERT_TRUE(key == "key3");
-    ASSERT_TRUE(node2.is_high_key_infinity());
-
-    node2.insert("key6", "value_______6");
-    BTNode<string, string> node3;
-    node2.add_foster_child(NodePointer(&node3));
-    node2.rebalance_foster_child<NodePointer>();
-
-    BTNode<string, string> node4;
-    node2.add_foster_child(NodePointer(&node4));
-    node2.rebalance_foster_child<NodePointer>();
 }
 
 TEST(TestRedo, SimpleInsertionRedo)
 {
     TxnContext ctx;
 
-    BTNode<string, string> node;
-    node.insert("key2", "value2");
-    node.insert("key0", "value0");
-    node.insert("key1", "value1");
-    node.insert("key3", "value3");
+    SArray n; Ptr node {&n};
+    N::insert(node, "key2", "value2");
+    N::insert(node, "key0", "value0");
+    N::insert(node, "key1", "value1");
+    N::insert(node, "key3", "value3");
 
-    BTNode<string, string> node_r;
+    SArray n_r; Ptr node_r {&n_r};
 
     string v;
     bool found;
@@ -141,18 +99,18 @@ TEST(TestRedo, SimpleInsertionRedo)
 
     auto iter = ctx.get_plog()->iterate();
     while (iter->next(hdr, payload)) {
-        auto lr = fineline::ConstructLogRec(hdr.type(), node_r, payload);
+        auto lr = fineline::ConstructLogRec<N, Ptr>(hdr.type(), node_r, payload);
         // std::cout << "REDOING " << *lr << std::endl;
         lr->redo();
     }
 
-    found = node_r.find("key0", &v);
+    found = N::find(node_r, "key0", v);
     ASSERT_TRUE(found); ASSERT_EQ(v, "value0");
-    found = node_r.find("key1", &v);
+    found = N::find(node_r, "key1", v);
     ASSERT_TRUE(found); ASSERT_EQ(v, "value1");
-    found = node_r.find("key2", &v);
+    found = N::find(node_r, "key2", v);
     ASSERT_TRUE(found); ASSERT_EQ(v, "value2");
-    found = node_r.find("key3", &v);
+    found = N::find(node_r, "key3", v);
     ASSERT_TRUE(found); ASSERT_EQ(v, "value3");
 
     // ctx.commit();

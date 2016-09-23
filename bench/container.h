@@ -23,6 +23,7 @@
 #define FINELINE_BENCH_CONTAINER_H
 
 #include "persistent_map.h"
+// #include "foster-btree/src/default_templates.h"
 
 namespace fineline {
 
@@ -34,11 +35,10 @@ class PersistentMap
 {
 public:
 
-    // TODO id 1 does not work because of how log page scan is filtered in log files
-    PersistentMap(unsigned id = 0)
+    void initialize(unsigned id)
     {
-        // TODO static ID intialization + logging
-        logger_.initialize(id, false);
+        logger_.initialize(id);
+        map_.clear();
     }
 
     template <typename... Args>
@@ -57,6 +57,37 @@ protected:
     Logger logger_;
     Map map_;
 };
+
+// constexpr size_t DftArrayBytes = 8192;
+// constexpr size_t DftAlignment = 8;
+// constexpr size_t DftNumLevels = 3;
+
+// template<class Node>
+// using NodeMgr = foster::BtreeNodeManager<Node, foster::AtomicCounterIdGenerator<unsigned>>;
+
+// template <class K, class V>
+//                 foster::KeyValueArray<K, V,
+//                       foster::SlotArray<K, DftArrayBytes, DftAlignment>,
+//                       foster::BinarySearch<foster::SlotArray<K, DftArrayBytes, DftAlignment>>,
+//                       foster::DefaultEncoder<K, V, K>,
+//                       Logger
+//                 >,
+
+// // TODO: we have to simplify this stuff, for instance, by removing all K,V arguments
+// template<class K, class V, class Logger>
+// using FosterBtree =
+//     foster::StaticBtree<K, V, DftNumLevels,
+//         foster::BtreeLevel<
+//             K, V, DftNumLevels,
+//             foster::BtreeNode<K, V,
+//                 foster::PlainPtr,
+//                 foster::MutexLatch
+//             >,
+//             foster::EagerAdoption,
+//             NodeMgr
+//         >
+// >;
+
 
 } // namespace fineline
 

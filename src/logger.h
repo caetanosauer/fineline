@@ -47,7 +47,7 @@ public:
     TxnLogger() : id_(0), seq_(0) { }
 
     template <typename... T>
-    void log(LRType type, T... args)
+    void log(const LRType& type, const T&... args)
     {
         LogrecHeader hdr = {id_, ++seq_, type};
         TxnContext::get()->log(hdr, args...);

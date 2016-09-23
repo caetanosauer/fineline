@@ -29,40 +29,40 @@
 
 namespace fineline {
 
-template <class Node>
+template <class NodePtr>
 struct Logrec
 {
-    Logrec(Node& node) : node(&node)
+    Logrec(NodePtr node) : node(node)
     {
     }
 
     virtual void redo() = 0;
     virtual void print(std::ostream&) const = 0;
 
-    friend std::ostream& operator<< (std::ostream& out, const Logrec<Node>& n)
+    friend std::ostream& operator<< (std::ostream& out, const Logrec<NodePtr>& n)
     {
-        n.print(out);
+        n->print(out);
         return out;
     }
 
-    Node* node;
+    NodePtr node;
 };
 
-template <class Node>
-struct LogrecInsert : public Logrec<Node>
+template <class N, class NodePtr>
+struct LogrecInsert : public Logrec<NodePtr>
 {
-    using Key = typename Node::KeyType;
-    using Value = typename Node::ValueType;
+    using Key = typename N::KeyType;
+    using Value = typename N::ValueType;
 
-    LogrecInsert(Node& node, char* payload)
-        : Logrec<Node>(node)
+    LogrecInsert(NodePtr node, char* payload)
+        : Logrec<NodePtr>(node)
     {
         LogEncoder<Key, Value>::decode(payload, &key, &value);
     }
 
     void redo()
     {
-        this->node->insert(key, value, false);
+        N::insert(this->node, key, value, false);
     }
 
     void print(std::ostream& out) const
@@ -75,19 +75,19 @@ struct LogrecInsert : public Logrec<Node>
 };
 
 
-template <class Node>
-std::unique_ptr<Logrec<Node>>
-ConstructLogRec(LRType type, Node& node, char* payload)
+template <class N, class NodePtr>
+std::unique_ptr<Logrec<NodePtr>>
+ConstructLogRec(LRType type, NodePtr node, char* payload)
 {
-    Logrec<Node>* res = nullptr;
+    Logrec<NodePtr>* res = nullptr;
     switch (type) {
-        case LRType::Insert: res = new LogrecInsert<Node>(node, payload); break;
+        case LRType::Insert: res = new LogrecInsert<N, NodePtr>(node, payload); break;
         default:
             auto what = "I don't know how to redo this log record";
             throw std::runtime_error(what);
     }
 
-    return std::unique_ptr<Logrec<Node>>{res};
+    return std::unique_ptr<Logrec<NodePtr>>{res};
 }
 
 
