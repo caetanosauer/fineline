@@ -24,5 +24,6 @@ FUNCTION (X_ADD_TESTCASE targetname the_libraries)
 ENDFUNCTION()
 
 X_ADD_TESTCASE(test_node_logging fineline)
+X_ADD_TESTCASE(test_swizzling fineline)
 X_ADD_TESTCASE(test_legacy_log_sqlite fineline)
 X_ADD_TESTCASE(test_persistent_map fineline)
