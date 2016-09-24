@@ -53,10 +53,11 @@ public:
         TxnContext::get()->log(hdr, args...);
     }
 
-    void initialize(IdType id, bool logit = true)
+    template <typename Ptr>
+    static void initialize(Ptr l, IdType id, bool logit = true)
     {
-        id_ = id;
-        if (logit) { log(LRType::Construct, id); }
+        l->id_ = id;
+        if (logit) { l->log(LRType::Construct, id); }
     }
 
     IdType id() { return id_; }
