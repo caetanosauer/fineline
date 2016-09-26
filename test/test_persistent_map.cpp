@@ -42,8 +42,8 @@ TEST(TestInsertions, SimpleInsertions)
     {
         TxnLogger logger;
         TxnContext ctx;
-        logger.initialize(LOGGER_ID);
 
+        TxnLogger::initialize(&logger, LOGGER_ID);
         fineline::map::insert(map, logger, "key", "value");
         fineline::map::insert(map, logger, "key2", "value_2");
         fineline::map::insert(map, logger, "key0", "value__0");

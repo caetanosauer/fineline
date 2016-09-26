@@ -44,7 +44,7 @@ public:
     using IdType = typename LogrecHeader::IdType;
     using SeqNumType = typename LogrecHeader::SeqNumType;
 
-    TxnLogger() : id_(0), seq_(0) { }
+    TxnLogger(IdType id = 0) : id_(id), seq_(0) { }
 
     template <typename... T>
     void log(const LRType& type, const T&... args)
