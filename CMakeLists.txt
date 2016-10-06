@@ -75,6 +75,10 @@ TEST_BIG_ENDIAN(WORDS_BIGENDIAN)
 
 find_package(Boost COMPONENTS regex system filesystem program_options REQUIRED)
 
+INCLUDE_DIRECTORIES (
+    ${CMAKE_SOURCE_DIR}/foster-btree/third-party/spdlog/include
+)
+
 # Subdirectories
 add_subdirectory(src)
 add_subdirectory(src/legacy)
