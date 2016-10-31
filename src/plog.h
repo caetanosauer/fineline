@@ -154,7 +154,7 @@ public:
     void import_logs(Iter& iter)
     {
         Key hdr;
-        char* payload;
+        const char* payload;
         while (iter->next(hdr, payload)) {
             if (!curr_page_) { add_new_page(); }
             bool success = curr_page_->try_insert_raw(hdr, payload);

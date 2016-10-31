@@ -50,7 +50,7 @@ public:
     {
         auto iter = log->scan(filter, forward);
         LogrecHeader hdr;
-        char* payload;
+        const char* payload;
         while (iter->next(hdr, payload)) {
             f(hdr, payload);
         }
@@ -60,7 +60,7 @@ public:
     {
         std::ostream& out = std::cout;
 
-        void operator()(const LogrecHeader& hdr, char*) const
+        void operator()(const LogrecHeader& hdr, const char*) const
         {
             out << hdr << std::endl;
         }

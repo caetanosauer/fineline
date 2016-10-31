@@ -41,7 +41,7 @@ template <class Key>
 class AbstractLogIterator
 {
 public:
-    virtual bool next(Key&, char*&) { return false; }
+    virtual bool next(Key&, const char*&) { return false; }
 };
 
 template <size_t PageSize, class LogrecHeader>
@@ -107,20 +107,20 @@ public:
     class Iterator : public AbstractLogIterator<Key>
     {
     public:
-        Iterator(ThisType* lp, bool forward = true) :
+        Iterator(const ThisType* lp, bool forward = true) :
             current_slot_{0}, forward_(forward), lp_{lp}
         {
             if (!forward && lp) { current_slot_ = lp_->slot_count() - 1; }
         }
 
-        bool next(Key& key, char*& payload)
+        bool next(Key& key, const char*& payload)
         {
             if (!lp_ || current_slot_ >= lp_->slot_count() || current_slot_ < 0) {
                 return false;
             }
 
             auto& slot = lp_->get_slot(current_slot_);
-            payload = reinterpret_cast<char*>(lp_->get_payload(slot.ptr));
+            payload = reinterpret_cast<const char*>(lp_->get_payload(slot.ptr));
             key = slot.key;
             current_slot_ += forward_ ? 1 : -1;
 
@@ -130,11 +130,11 @@ public:
     private:
         SlotNumber current_slot_;
         bool forward_;
-        ThisType* lp_;
+        const ThisType* lp_;
     };
 
     template <class... Args>
-    std::unique_ptr<Iterator> iterate(Args... args)
+    std::unique_ptr<Iterator> iterate(Args... args) const
     {
         return std::unique_ptr<Iterator>{new Iterator{this, args...}};
     }

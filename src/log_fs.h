@@ -83,7 +83,7 @@ public:
             next_block();
         }
 
-        bool next(LogKey& key, char*& payload)
+        bool next(LogKey& key, const char*& payload)
         {
             bool has_more = true;
             while (has_more) {
