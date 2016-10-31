@@ -36,8 +36,8 @@ struct YCSBStaticOptions
 };
 
 using DftYCSB = ycsb::Benchmark<
-    PersistentMap<std::map<unsigned, std::string>, DftLogger>,
-    // FosterBtree<unsigned, std::string>,
+    // PersistentMap<std::map<unsigned, std::string>, DftLogger>,
+    FosterBtree<unsigned, std::string, DftLogger>,
     DftTxnContext,
     YCSBStaticOptions
 >;

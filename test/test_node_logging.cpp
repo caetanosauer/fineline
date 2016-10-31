@@ -47,7 +47,7 @@ using SArray = foster::SlotArray<
 
 template<class K, class V>
 using BaseNode = foster::Node<K, V,
-      foster::BinarySearch<SArray>,
+      foster::BinarySearch,
       foster::GetEncoder<PMNK>::template type,
       fineline::test::FakeLogger<TestEnv>
 >;

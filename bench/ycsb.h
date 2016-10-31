@@ -22,6 +22,8 @@
 #ifndef FINELINE_BENCH_YCSB_H
 #define FINELINE_BENCH_YCSB_H
 
+#include <memory>
+
 #include "generator.h"
 
 namespace fineline {
@@ -58,6 +60,12 @@ public:
     {
         if (loaded_) return;
 
+        {
+            // create-table transaction
+            TxnContext ctx {true};
+            table_.reset(new Container);
+        }
+
         unsigned i = 0;
         while (i < opt_.num_records) {
             TxnContext ctx {true};
@@ -65,7 +73,7 @@ public:
             while (j < opt_.load_batch_size && i < opt_.num_records) {
                 auto key = i + 1;
                 auto& value = strgen_.next();
-                table_.put(key, value);
+                table_->put(key, value);
                 i++;
                 j++;
             }
@@ -95,7 +103,7 @@ protected:
         TxnContext ctx;
         auto key = zipf_[txn_id];
         std::string value;
-        table_.get(key, value);
+        table_->get(key, value);
         ctx.commit();
     }
 
@@ -103,14 +111,14 @@ protected:
     {
         TxnContext ctx;
         auto key = zipf_[txn_id];
-        table_.put(key, strgen_.next());
+        table_->put(key, strgen_.next());
         ctx.commit();
     }
 
 private:
     std::vector<unsigned> zipf_;
     gen::StringGenerator<StaticOptions::MinRecSize, StaticOptions::MaxRecSize> strgen_;
-    Container table_;
+    std::unique_ptr<Container> table_;
     BenchmarkOptions opt_;
     bool loaded_ = false;
 };

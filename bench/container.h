@@ -23,7 +23,7 @@
 #define FINELINE_BENCH_CONTAINER_H
 
 #include "persistent_map.h"
-// #include "foster-btree/src/default_templates.h"
+#include "foster-btree/src/default_templates.h"
 
 namespace fineline {
 
@@ -58,35 +58,49 @@ protected:
     Map map_;
 };
 
-// constexpr size_t DftArrayBytes = 8192;
-// constexpr size_t DftAlignment = 8;
-// constexpr size_t DftNumLevels = 3;
+constexpr size_t DftArrayBytes = 8192;
+constexpr size_t DftAlignment = 8;
+constexpr size_t DftNumLevels = 3;
 
-// template<class Node>
-// using NodeMgr = foster::BtreeNodeManager<Node, foster::AtomicCounterIdGenerator<unsigned>>;
+using DftPMNK = uint32_t;
 
-// template <class K, class V>
-//                 foster::KeyValueArray<K, V,
-//                       foster::SlotArray<K, DftArrayBytes, DftAlignment>,
-//                       foster::BinarySearch<foster::SlotArray<K, DftArrayBytes, DftAlignment>>,
-//                       foster::DefaultEncoder<K, V, K>,
-//                       Logger
-//                 >,
+template <class Logger>
+using SArray = foster::SlotArray<DftPMNK, DftArrayBytes, DftAlignment,
+            foster::FosterNodePayloads,
+            foster::MutexLatch,
+            Logger
+        >;
 
-// // TODO: we have to simplify this stuff, for instance, by removing all K,V arguments
-// template<class K, class V, class Logger>
-// using FosterBtree =
-//     foster::StaticBtree<K, V, DftNumLevels,
-//         foster::BtreeLevel<
-//             K, V, DftNumLevels,
-//             foster::BtreeNode<K, V,
-//                 foster::PlainPtr,
-//                 foster::MutexLatch
-//             >,
-//             foster::EagerAdoption,
-//             NodeMgr
-//         >
-// >;
+template <class Logger>
+struct GetNode
+{
+    template<class K, class V>
+    using base = foster::Node<K, V,
+        foster::BinarySearch,
+        foster::GetEncoder<DftPMNK>::template type,
+        Logger
+    >;
+
+    template<class K, class V>
+    struct type : foster::FosterNode<K, V,
+          base,
+          foster::AssignmentEncoder,
+          foster::MutexLatch
+    > {};
+};
+
+template<class N>
+using NodeMgr = foster::BtreeNodeManager<N>;
+
+template<class K, class V, class Logger>
+using FosterBtree =
+    foster::GenericBtree<K, V,
+        SArray<Logger>,
+        GetNode<Logger>::template type,
+        foster::PlainPtr,
+        NodeMgr,
+        foster::EagerAdoption
+>;
 
 
 } // namespace fineline
