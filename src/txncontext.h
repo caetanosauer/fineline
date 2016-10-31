@@ -59,6 +59,7 @@ public:
         // Step 1) Insert log pages into commit buffer
         EpochNumber epoch {0};
         plog_.insert_into_buffer(SysEnv::commit_buffer.get(), epoch);
+        plog_.reset();
 
         // Step 2) Wait for given epoch to be hardened on persistent log
         // TODO this whill hang forever for now, because we don't have a flush daemon running

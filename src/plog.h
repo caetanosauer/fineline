@@ -92,6 +92,13 @@ public:
         }
     }
 
+    void reset()
+    {
+        has_overflown_ = false;
+        page_.clear();
+        size_ = 0;
+    }
+
     size_t size() const { return size_; }
 
 protected:
