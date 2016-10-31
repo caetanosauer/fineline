@@ -22,20 +22,33 @@
 #ifndef FINELINE_LOGGER_H
 #define FINELINE_LOGGER_H
 
-/**
- * \file kv_array.h
- *
- * A fixed-length array that encodes arbitrary key-value pairs and stores them in a slot array in
- * the appropriate position.
- */
-
 #include "lrtype.h"
 
 namespace fineline {
 
 using foster::LRType;
 
-template <class TxnContext, class LRHeader>
+/**
+ * \brief Node ID generator that uses a single, program-wide atomic counter.
+ */
+template <class IdType>
+class AtomicCounterIdGenerator
+{
+public:
+    using Type = IdType;
+
+    static IdType generate()
+    {
+        static std::atomic<IdType> counter{0};
+        return ++counter;
+    }
+};
+
+template <
+    class TxnContext,
+    class LRHeader,
+    template <class> class IdGenerator = AtomicCounterIdGenerator
+>
 class TxnLogger
 {
 public:
@@ -43,6 +56,7 @@ public:
     using SysEnv = typename TxnContext::SysEnv;
     using IdType = typename LogrecHeader::IdType;
     using SeqNumType = typename LogrecHeader::SeqNumType;
+    using IdGen = IdGenerator<IdType>;
 
     TxnLogger(IdType id = 0) : id_(id), seq_(0) { }
 
@@ -54,7 +68,7 @@ public:
     }
 
     template <typename Ptr>
-    static void initialize(Ptr l, IdType id, bool logit = true)
+    static void initialize(Ptr l, IdType id = IdGen::generate(), bool logit = true)
     {
         l->id_ = id;
         if (logit) { l->log(LRType::Construct, id); }
