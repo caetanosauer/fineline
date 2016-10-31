@@ -64,6 +64,14 @@ public:
         assert<3>(max_key >= min_key);
         assert<3>(max_key.node_id() >= min_key.node_id());
 
+        // For debugging:
+        // auto iter = page.iterate();
+        // LogKey hdr;
+        // const char* payload;
+        // while (iter->next(hdr, payload)) {
+        //     std::cout << hdr << std::endl;
+        // }
+
         auto file = fs_->get_file_for_flush(FirstLevelFile);
         size_t offset = file->append(&page);
         index_->insert_block(file->num().data(), offset, epoch, min_key.node_id(), max_key.node_id());
