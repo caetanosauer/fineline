@@ -63,7 +63,7 @@ using BaseNode = foster::Node<K, V,
 template<class K, class V>
 using FosterNode = foster::FosterNode<K, V,
       BaseNode,
-      foster::AssignmentEncoder,
+      foster::InlineEncoder,
       foster::MutexLatch
 >;
 

@@ -22,6 +22,8 @@
 #ifndef FINELINE_LOGGER_H
 #define FINELINE_LOGGER_H
 
+#include <atomic>
+
 #include "lrtype.h"
 
 namespace fineline {

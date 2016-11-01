@@ -84,7 +84,7 @@ struct GetNode
     template<class K, class V>
     struct type : foster::FosterNode<K, V,
           base,
-          foster::AssignmentEncoder,
+          foster::InlineEncoder,
           foster::MutexLatch
     > {};
 };
