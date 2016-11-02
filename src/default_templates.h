@@ -22,6 +22,7 @@
 #ifndef FINELINE_DEFAULT_TEMPLATES_H
 #define FINELINE_DEFAULT_TEMPLATES_H
 
+#include "lrtype.h"
 #include "options.h"
 #include "logpage.h"
 #include "plog.h"
