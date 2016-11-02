@@ -34,7 +34,7 @@ SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g ${CMAKE_CXX_FLAGS_RELEASE}")
 
 list(APPEND CMAKE_CXX_FLAGS "-pthread")
 # -pedantic requires -Wno-long-long
-SET (ALWAYS_FLAGS "-std=c++11 -Wall -Wextra -Woverloaded-virtual -fno-strict-aliasing -Wpointer-arith")
+SET (ALWAYS_FLAGS "-std=c++11 -Wall -Wextra -Woverloaded-virtual -fno-strict-aliasing -Wpointer-arith -fPIC")
 SET (YES_INLINE_FLAGS "-finline-functions")
 
 ## enabled by config option (default)
