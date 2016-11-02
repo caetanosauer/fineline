@@ -62,7 +62,6 @@ public:
         plog_.reset();
 
         // Step 2) Wait for given epoch to be hardened on persistent log
-        // TODO this whill hang forever for now, because we don't have a flush daemon running
         bool success = SysEnv::log_flusher->wait_until_hardened(epoch);
         if (!success) { abort(); }
         return success;

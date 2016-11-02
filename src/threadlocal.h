@@ -46,8 +46,10 @@ public:
 
     static Base* get()
     {
-        // TODO check for nullptr?
-        // YES, or at least print reasonable error message if user does not define a TxnContext
+        if (!current) {
+            throw std::runtime_error("Thread-local object was not initialized \
+                    (Did you forget to create a TxnContext?)");
+        }
         return current;
     }
 
