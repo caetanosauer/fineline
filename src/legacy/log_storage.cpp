@@ -147,6 +147,10 @@ log_storage<P>::log_storage(const Options& options)
             }
         }
         else if (fname == _index_file_name) {
+            if (reformat) {
+                fs::remove(fpath);
+                continue;
+            }
             // ignore
         }
         else {
