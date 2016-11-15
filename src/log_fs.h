@@ -84,8 +84,16 @@ public:
     {
     public:
         template <class Filter>
-        LogFileIterator(ThisType* log, Filter filter, uint64_t key = 0, bool forward = true)
-            : log_(log), queried_key_(key), filter_(filter), forward_(forward),
+        LogFileIterator(ThisType* log, Filter filter, bool forward = true)
+            : log_(log), filter_(filter), forward_(forward),
+            block_index_iter_ {std::move(log->index_->fetch_blocks(forward))}
+        {
+            next_block();
+        }
+
+        template <class Filter>
+        LogFileIterator(ThisType* log, Filter filter, uint64_t key, bool forward = true)
+            : log_(log), /*queried_key_(key),*/ filter_(filter), forward_(forward),
             block_index_iter_ {std::move(log->index_->fetch_blocks(key, forward))}
         {
             next_block();
@@ -130,7 +138,7 @@ public:
     private:
         LogPage page_;
         ThisType* log_;
-        uint64_t queried_key_;
+        // uint64_t queried_key_;
         std::function<bool(const LogKey&)> filter_;
         bool forward_;
         std::unique_ptr<LogPageIterator> page_iter_;
@@ -146,7 +154,7 @@ public:
     template <class Filter>
     std::unique_ptr<LogFileIterator> scan(Filter filter, bool forward = true)
     {
-        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, filter, 0, forward}};
+        return std::unique_ptr<LogFileIterator>{new LogFileIterator{this, filter, forward}};
     }
 
 private:

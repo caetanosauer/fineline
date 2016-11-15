@@ -57,6 +57,7 @@ public:
     class FetchBlockIterator
     {
     public:
+        FetchBlockIterator(SQLiteLogIndex* owner, bool forward);
         FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key, bool forward);
         ~FetchBlockIterator();
         bool next(uint32_t& file, uint32_t& block);
@@ -66,6 +67,7 @@ public:
         bool done_;
     };
 
+    std::unique_ptr<FetchBlockIterator> fetch_blocks(bool forward);
     std::unique_ptr<FetchBlockIterator> fetch_blocks(uint64_t key, bool forward);
 
     // Used for tests

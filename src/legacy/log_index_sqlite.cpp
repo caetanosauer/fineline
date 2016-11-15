@@ -50,6 +50,20 @@ const auto CreateTablesQuery =
 const auto InsertBlockQuery =
     "insert into logblocks values (?,?,0,?,?,?,?,NULL)";
 
+const auto FetchAllBlocksForward =
+    "select file_number, block_number "
+    "from logblocks "
+    "where level = ? "
+    "order by first_epoch asc, last_epoch desc"
+;
+
+const auto FetchAllBlocksBackward =
+    "select file_number, block_number "
+    "from logblocks "
+    "where level = ? "
+    "order by last_epoch desc, first_epoch asc"
+;
+
 const auto FetchForwardHistoryByLevelQuery =
     "select file_number, block_number "
     "from logblocks "
@@ -133,10 +147,25 @@ void SQLiteLogIndex::insert_block(uint32_t file, uint32_t block, uint64_t epoch,
     sql_check(rc, SQLITE_DONE);
 }
 
+std::unique_ptr<SQLiteLogIndex::FetchBlockIterator> SQLiteLogIndex::fetch_blocks(bool forward)
+{
+    return std::unique_ptr<FetchBlockIterator> { new FetchBlockIterator {this, forward} };
+}
+
 std::unique_ptr<SQLiteLogIndex::FetchBlockIterator> SQLiteLogIndex::fetch_blocks(uint64_t key,
         bool forward)
 {
     return std::unique_ptr<FetchBlockIterator> { new FetchBlockIterator {this, key, forward} };
+}
+
+SQLiteLogIndex::FetchBlockIterator::FetchBlockIterator(SQLiteLogIndex* owner, bool forward)
+{
+    owner_ = owner;
+    done_ = false;
+    auto& query = forward ? FetchAllBlocksForward : FetchAllBlocksBackward;
+    owner_->sql_check(sqlite3_prepare_v2(owner_->db_, query, -1, &stmt_, 0));
+    // TODO: here's where we iterate over levels to fetch from merged partitions
+    owner_->sql_check(sqlite3_bind_int(stmt_, 1, 0));
 }
 
 SQLiteLogIndex::FetchBlockIterator::FetchBlockIterator(SQLiteLogIndex* owner, uint64_t key,
