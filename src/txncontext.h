@@ -25,9 +25,12 @@
 #include <stdexcept>
 #include <memory>
 
+#include "debug_log.h"
 #include "threadlocal.h"
 
 namespace fineline {
+
+using foster::dbg;
 
 template <class Plog, class Env>
 class TxnContext
@@ -53,22 +56,28 @@ public:
     {
         if (plog_.size() == 0) {
             // read-only transaction
+            dbg::trace("Committing read-only transaction");
             return true;
         }
 
         // Step 1) Insert log pages into commit buffer
+        dbg::trace("Committing read-write transaction");
         EpochNumber epoch {0};
         plog_.insert_into_buffer(SysEnv::commit_buffer.get(), epoch);
         plog_.reset();
 
         // Step 2) Wait for given epoch to be hardened on persistent log
         bool success = SysEnv::log_flusher->wait_until_hardened(epoch);
+
         if (!success) { abort(); }
+        else { dbg::trace("Transaction committed successfully with epoch {}", epoch); }
+
         return success;
     }
 
     void abort()
     {
+        dbg::trace("Aborting transaction");
         // TODO
     }
 

@@ -26,7 +26,7 @@
 #include <thread>
 #include <chrono>
 
-#include "assertions.h"
+#include "debug_log.h"
 #include "legacy/carray_slot.h"
 #include "move_records.h"
 
@@ -37,6 +37,7 @@
 namespace fineline {
 
 using foster::assert;
+using foster::dbg;
 
 template <
     class LogPage,
@@ -86,6 +87,8 @@ public:
         CArraySlot* cslot {nullptr};
         Reservation target {0};
 
+        dbg::trace("Inserting {} plog records with {} payloads into log buffer",
+                plog.slot_count(), payload_count);
         join_carray(to_reserve, cslot, target);
         auto epoch = cslot->epoch;
         copy_to_target(plog, target, cslot);
@@ -145,10 +148,14 @@ protected:
     {
         // Step 1) make sure current page exists and has enough space
         auto space_needed = get_reservation_bytes(to_reserve);
+
         if (!curr_page_ || space_needed > curr_page_->free_space()) {
             // release current page and get new one
             cslot->epoch = release_current_epoch();
         }
+        dbg::trace("Reserving space for {} bytes on page with {} bytes free",
+                space_needed, curr_page_->free_space());
+
         assert<1>(curr_page_.get());
         assert<1>(space_needed <= curr_page_->free_space());
         cslot->log_page = curr_page_;
