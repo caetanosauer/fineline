@@ -176,7 +176,7 @@ protected:
     {
         SlotNumber target_slot = cslot->first_slot + decode_reservation(target).first;
         PayloadPtr target_payload = cslot->first_payload + decode_reservation(target).second;
-        foster::copy_records_prealloc(*curr_page_, target_slot, target_payload,
+        foster::copy_records_prealloc(*cslot->log_page, target_slot, target_payload,
                 plog, SlotNumber{0}, plog.slot_count());
     }
 
@@ -205,6 +205,8 @@ protected:
         // Simply request a new page, releasing the current one by decreasing its
         // shared_ptr ref count. Once it reaches zero, flusher can pick it up.
         curr_page_ = buffer_->produce(epoch);
+        curr_page_->clear();
+        assert<1>(curr_page_->slot_count() == 0);
         return epoch;
     }
 
