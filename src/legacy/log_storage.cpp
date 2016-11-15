@@ -146,7 +146,7 @@ log_storage<P>::log_storage(const Options& options)
                 last_files[fnum.hi()] = fnum.lo();
             }
         }
-        else if (fname == _index_file_name) {
+        else if (fname.substr(0, _index_file_name.length()) == _index_file_name) {
             if (reformat) {
                 fs::remove(fpath);
                 continue;
