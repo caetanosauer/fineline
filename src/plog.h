@@ -46,8 +46,8 @@ public:
     using Key = typename LogPage::Key;
 
     TxnPrivateLog()
-        : page_(), has_overflown_(false), size_(0)
     {
+        reset();
     }
 
     ~TxnPrivateLog()
