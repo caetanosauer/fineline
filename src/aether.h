@@ -101,8 +101,9 @@ public:
     {
         assert<1>(payload_count < (1ul << PayloadBits));
         // one bit must be left for sign
-        assert<1>(slot < (1ul << (PayloadBits-1)));
-        assert<1>(slot > 0 && payload_count > 0);
+        assert<1>(slot > 0 && slot < (1ul << (PayloadBits-1)));
+        // payload count may be zero
+        // assert<1>(slot > 0 && payload_count > 0);
 
         return (((Reservation) slot) << PayloadBits) + payload_count;
     }
@@ -162,7 +163,9 @@ protected:
 
         // Step 2) allocate slots and payloads requested
         auto resv = decode_reservation(to_reserve);
-        assert<1>(resv.first > 0 && resv.second > 0);
+        // payload count may be zero
+        // assert<1>(resv.first > 0 && resv.second > 0);
+        assert<1>(resv.first > 0);
         bool success = foster::preallocate_slots(*curr_page_, resv.first, resv.second,
                 cslot->first_slot, cslot->first_payload);
         assert<1>(success);
